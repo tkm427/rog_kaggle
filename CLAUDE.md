@@ -350,6 +350,7 @@ Kaggle 提出時は `make_submission.py` の内容を Notebook にコピーし�
 |---|---|---|---|
 | `scripts/analyze_per_class_auc.py` | クラス別スコア分析（稀少 vs 頻出） | `--model`, `--data` | クラス別スコアテーブル |
 | `scripts/analyze_cv_lb_corr.py` | ローカル CV と LB の相関分析 | `--exp` | 散布図・相関係数 |
+| `scripts/eda_overview.py` | データ全体の俯瞰 EDA | なし | ウェル数・行数・TVT分布・GRシフト・null model RMSE |
 
 ---
 
