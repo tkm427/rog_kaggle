@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(command -v uv)",
-      "Bash(uv --version)"
+      "Bash(uv --version)",
+      "Bash(python3 -c \"import json; nb=json.load\\(open\\('notebooks/eda_2.ipynb'\\)\\); [print\\(''.join\\(c.get\\('source',[]\\)\\)[:300],'\\\\n---'\\) for c in nb.get\\('cells',[]\\)]\")",
+      "Bash(python3 -c ' *)",
+      "Bash(uv run python3 -c ' *)",
+      "Bash(uv sync *)",
+      "Bash(uv run *)",
+      "Bash(WANDB_MODE=offline timeout 180 uv run python3 scripts/train.py wandb.run_name=smoketest data.train_dir=data/raw/train data.test_dir=data/raw/test)",
+      "Bash(apt list *)",
+      "Bash(sudo -n apt-get install -y libgomp1)",
+      "Bash(pip3 download *)"
     ]
   }
 }

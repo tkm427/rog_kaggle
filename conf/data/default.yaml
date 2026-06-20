@@ -1,0 +1,8 @@
+train_dir: /workspace/data/raw/train
+test_dir: /workspace/data/raw/test
+n_folds: 5
+seed: 42
+
+# data_structure.md: 全 train の TVT 値域。submission の post-process clip に使う
+tvt_min: 9245.0
+tvt_max: 12894.0

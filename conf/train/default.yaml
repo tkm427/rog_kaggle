@@ -1,0 +1,10 @@
+# tvt_regime.md p95 を稀少レジーム（境界跨ぎ）の閾値として規約化
+rare_threshold: 0.91
+
+# 学習対象は tail 行のみ（prefix は target leakage に近いため学習には使わない）
+train_on_tail_only: true
+
+gr_rolling_windows: [10, 30, 100]
+
+# DTW Target-Free Alignment は exp001 で実用不可と判明（src/features.py docstring 参照）。
+# exp002 で再設計するまで未使用。

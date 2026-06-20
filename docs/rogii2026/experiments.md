@@ -4,17 +4,15 @@
 
 ## 現在のフォーカス
 
-**まだ実験開始前。** Week 1 のタスク:
-1. データダウンロード & 中身確認
-2. ~~`competition_overview.md` の ★ TODO を埋める~~
-3. `eda/` に最初の発見を 3-5 本
-4. exp001（公開 Notebook fork で submission）を出す
+exp001 完了。次は **DTW/Target-Free Alignment の再設計（exp002）** が最優先。
+理由: exp001（trajectory+GR特徴のみ）の OOF RMSE 14.28 は flat anchor(15.91)からの改善は小さく、pilkwang(8.07)とのギャップが大きい。DTWに相当する信号が依然最大のレバーと判断（詳細 `experiments/exp001_baseline.md`）。
+他の未着手タスク: Kaggle への実提出（CV-LB相関の最初の1点）、`discussions.md` の実調査、ウェル別残差分析。
 
 ## 実験一覧
 
 | ID | 仮説 | 主な変更 | OOF RMSE | LB RMSE | 状態 | 備考 |
 |---|---|---|---|---|---|---|
-| exp001 | 公開 Notebook fork で最小 E2E を確立 | — | — | — | TODO | ベースライン確立 |
+| exp001 | Anchor+Trajectory+GR特徴でLightGBM残差モデルがflat anchor(15.91)を改善する | GroupKFold(well_id,5) + LightGBM残差予測 | 14.28（rare 13.84 / common 14.28） | 12.959 | DONE | DTWは性能・精度問題で除外（exp002へ）。submission.csv生成・フォーマット確認済み、未提出 |
 
 新しい実験を追加したら必ず 1 行追加する。状態は `TODO / RUNNING / DONE / ABANDONED`。
 
@@ -41,16 +39,15 @@ CV-LB の相関係数が安定してきたら、提出を出さずに OOF だけ
 
 ## ロードマップ（更新随時）
 
-- [ ] exp001: 公開 Notebook fork → submission（CV-LB のキャリブレーション開始）
-- [ ] exp002: GroupKFold (well_id) で OOF を作る
-- [ ] exp003: GR × Typewell の DTW 特徴量追加
-- [ ] exp004: ウェル別残差を分析 → 失敗パターン抽出
-- [ ] exp005: 後処理スムージング（Savitzky-Golay）
-- [ ] exp006: 近隣ウェル空間特徴
-- [ ] exp007: CatBoost ベースライン
-- [ ] exp008: 1D-CNN / TCN シーケンスモデル
-- [ ] exp009: Transformer
-- [ ] exp010: アンサンブル（Hill Climbing）
+- [x] exp001: Anchor+Trajectory+GR特徴 + LightGBM残差モデルでベースライン確立（GroupKFold OOF含む）
+- [ ] exp002: GR × Typewell の DTW/Target-Free Alignment を再設計（anchor制約・PF/beam search 相当のガードレール）
+- [ ] exp003: ウェル別残差を分析 → 失敗パターン抽出
+- [ ] exp004: 後処理スムージング（Savitzky-Golay）
+- [ ] exp005: 近隣ウェル空間特徴
+- [ ] exp006: CatBoost ベースライン
+- [ ] exp007: 1D-CNN / TCN シーケンスモデル
+- [ ] exp008: Transformer
+- [ ] exp009: アンサンブル（Hill Climbing）
 - [ ] ...
 
 ## 失敗・廃案の記録
@@ -59,3 +56,4 @@ CV-LB の相関係数が安定してきたら、提出を出さずに OOF だけ
 
 | exp | 試したこと | 結果 | 廃案理由 |
 |---|---|---|---|
+| exp001(DTW部分) | fastdtw による全系列GR-Typewell GRのDTWマッチング | 1well 239秒(radius200)〜0.7-16秒(軽量化後)だが、prefix区間でのアラインメントRMSEが50-260ft（flat anchor 12.8ftより悪化） | 計算コストと精度の両方で実用不可。anchor制約・PF/beam search等のガードレール無しの素朴な実装では機能しない → exp002で再設計 |

@@ -116,14 +116,6 @@ print(f"Rows above p99: {(all_diffs > p99).sum():,} ({(all_diffs > p99).mean()*1
 print()
 
 # ──────────────────────────────────────────
-# 5. Test well が train に含まれるか確認
-# ──────────────────────────────────────────
-overlap = set(test_well_ids) & set(train_well_ids)
-print(f"=== Train/Test well overlap ===")
-print(f"Overlapping wells: {overlap}")
-print()
-
-# ──────────────────────────────────────────
 # 6. typewell 確認（1本詳細）
 # ──────────────────────────────────────────
 print("=== typewell sample (first well) ===")

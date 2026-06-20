@@ -1,0 +1,14 @@
+defaults:
+  - model: lgbm
+  - data: default
+  - train: default
+  - _self_
+
+# CLAUDE.md の規約（outputs/best_model.pth 等の相対パス）に合わせ、Hydra の自動 chdir を無効化する
+hydra:
+  job:
+    chdir: false
+
+wandb:
+  project: baseline
+  run_name: ???  # 実行時に必ず指定

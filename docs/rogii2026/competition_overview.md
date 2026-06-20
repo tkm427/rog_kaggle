@@ -57,7 +57,6 @@ $$
 - `TVT_input`: 評価ゾーン外で部分的に与えられる TVT 系列のヒント。known prefix では `TVT_input == TVT` （pilkwang Section 6 で確認済み）なので `last_known_TVT` を anchor として使える。**境界条件として強力だがリーク管理が必須 → 「リーク管理」セクション参照**
 - **train のみに存在する地質層境界（formation surface）列**: `ANCC`, `ASTNU`, `ASTNL`, `EGFDU`, `EGFDL`, `BUDA`（6 種）。hidden test には存在しないため、直接特徴量にはできない。空間 imputer（`(X,Y) -> formation top`）を train のみでフィットし、val/test に投影する形でのみ利用可（pilkwang Section 5）
 
-> **実際のカラム一覧は EDA で必ず確認し、本ファイルに追記すること。** 上記は公開 Notebook と Discussion から推定したもの。
 
 **参考（pilkwang Notebook Task Snapshot より、pilkwang が使用したローカルデータの規模感）**: train wells 773 / train tail rows（hidden 区間に相当する行数）3,783,989 / 配布 test wells 3 / 提出行数 14,151。隠れテストではウェル数・行数が大きく増える前提で実装する。
 
