@@ -46,6 +46,10 @@
    → exp00X で point-wise LGBM vs sequence model を比較
 6. **[H6] 近隣ウェル（X, Y 座標）の TVT を空間特徴として使うと改善**  
    → pilkwang の Section 13 "Nearby-Well Spatial Signal" を参考に
+7. **[H9] 単一整列手法ではなくDTW/PF/beam/NCCを並行アンサンブルし、CatBoost追加+Ridge stack+Savitzky-Golay後処理を組み合わせれば、exp001(OOF 14.28)からboristown notebookのlegitimate GroupKFold OOF相当(10.42)に近づけるはず**（2026-06-29調査、`research/public_notebooks.md`）  
+   → pm001（beam単体の外れ値問題）への直接対策。exp003完了で次の最優先候補に確定（trajectory-TVTデカップリングwellsを優先ターゲットにできるはず）
+8. **[H10] trajectory(-Z)とGRベース整列の不一致度（disagreement, signed/abs）を特徴量化すれば、LightGBMが「trajectory予測を信用できない区間」を学習し系統誤差が減るはず**（2026-06-29、exp003の発見より）  
+   → exp003でworst 10ウェルの4/10がtrajectory変位とTVT変位の符号すら反転していたことが根拠。H9（重いアンサンブル）着手前に軽量に検証できる候補
 
 ## 検証戦略
 
@@ -58,16 +62,22 @@
 
 ## 既知のベンチマーク（リサーチ時点）
 
-公開 Notebook の最高スコア:
+公開 Notebook の最高スコア（2026-06-29 再調査で更新。詳細は `research/public_notebooks.md`）:
 
 | LB | Notebook | 備考 |
 |---|---|---|
-| 8.072 | pilkwang | EDA + Target-Free Alignment（最高公開） |
-| 9.251 | nihilisticneuralnet | DWT 特徴 |
+| 8.072 | pilkwang | EDA + Target-Free Alignment（最高公開、06-29時点でも更新の確証なし） |
+| 9.251 | nihilisticneuralnet | **タイトルは「DWT」だが実装はPF+beam+DTW+NCCアンサンブル**（06-29精読で訂正） |
 | 9.538 | rauffauzanrambe | 学習 Notebook |
-| 12.602 | romantamrazov | Super Baseline |
+| 9.956 🆕 | romantamrazov | BETTER SOLUTION（旧SUPER BASELINE 12.602の改善版、手法詳細未確認） |
+| "TOP 3"（数値不明）🆕 | romantamrazov | SUPER SOLUTION（BETTER SOLUTIONの更なる改善版、173 upvotes、手法詳細未確認） |
+| 12.602 | romantamrazov | Super Baseline（同著者の旧版） |
 
-→ **目安**: 7 を切れたらメダル圏視野、6 切りで上位安定、5 以下で勝負（あくまで現時点・終盤に下がる前提）。
+🆕 = 2026-06-29 Web調査で新規発見。手法詳細はローカル未DLのため未検証（要 `kaggle kernels pull` 等での手動取得）。
+
+**追記（2026-06-29、ユーザー提供notebook精読）**: boristown「Public Rebuild」系列で公開LB **7.159**を確認（`research/public_notebooks.md`）。ただし精読の結果、この値は**配布test 3 wellのtrain重複を直接利用するsame-well shortcutで底上げされている**ことが判明（`competition_overview.md`のリーク管理セクション参照）。同notebookのリーク無視部分を除いた legitimate な技術スタック（PF+beam+NCC整列アンサンブル+LightGBM/CatBoost+Ridge stack+後処理）はGroupKFold OOF **10.42**（773 well）で、これは公開LBの数字より信頼できる「本当の改善分」の目安になる。
+
+→ **目安**: 7 を切れたらメダル圏視野、6 切りで上位安定、5 以下で勝負（あくまで現時点・終盤に下がる前提）。**ただし公開LBの絶対値はsame-well shortcutで底上げされている疑いが強いため、今後は公開LBの順位を直接の目標にせず、GroupKFold OOF（重複ウェルを除いた検証）を信頼する。** 中位帯（romantamrazov系列）もこの2週間で明確に進化しており、公開水準は今後も下降し続ける前提でロードマップを組む。
 
 ## 週次ふりかえり
 

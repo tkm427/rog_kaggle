@@ -6,5 +6,8 @@ train_on_tail_only: true
 
 gr_rolling_windows: [10, 30, 100]
 
-# DTW Target-Free Alignment は exp001 で実用不可と判明（src/features.py docstring 参照）。
-# exp002 で再設計するまで未使用。
+# 素朴な全系列DTW（dtw_align、exp001）・anchor制約付きbeam search（beam_alignment_features、exp002）
+# いずれも実用不可と判明（postmortems/pm001_beam_alignment_drift.md 参照: 短horizonのsanity checkは
+# 通過したが、実際のtail長（平均4867行）では累積drift（RMSE 100〜500ft）が発生しOOFを悪化させた）。
+# 関数自体は将来の再設計用に残し、デフォルトでは無効化する。
+enable_beam_features: false

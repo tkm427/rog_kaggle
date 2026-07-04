@@ -2,7 +2,8 @@
 
 GroupKFold(well_id) で OOF を作り、overall / rare / common RMSE を計算して W&B に記録する。
 exp001: Anchor + trajectory(X,Y,Z変位, -Z) + GR calibration/rolling/gradient 特徴 + LightGBM 残差モデル。
-DTW Target-Free Alignment は実用不可と判明したため exp002 まで保留（src/features.py docstring 参照）。
+exp002: anchor制約付き beam search による Target-Free Alignment 特徴を追加
+（`conf/train/default.yaml::enable_beam_features` で切替、src/features.py::beam_alignment_features 参照）。
 """
 import os
 import sys
@@ -23,13 +24,13 @@ from src.model import LGBMResidualModel
 NON_FEATURE_COLS = ["well_id", "row_index", "is_tail", "TVT", "resid", "tvt_diff_abs"]
 
 
-def build_all_features(train_dir: str, gr_rolling_windows: list[int]) -> pd.DataFrame:
+def build_all_features(train_dir: str, gr_rolling_windows: list[int], enable_beam_features: bool) -> pd.DataFrame:
     well_ids = list_well_ids(train_dir)
     frames = []
     for well_id in well_ids:
         hw = load_well(well_id, train_dir)
         tw = load_typewell(well_id, train_dir)
-        feat = build_feature_frame(hw, tw, gr_rolling_windows)
+        feat = build_feature_frame(hw, tw, gr_rolling_windows, enable_beam_features=enable_beam_features)
         feat["tvt_diff_abs"] = hw["TVT"].diff().abs().to_numpy()
         frames.append(feat)
     return pd.concat(frames, ignore_index=True)
@@ -49,7 +50,7 @@ def main(cfg: DictConfig) -> None:
         config=OmegaConf.to_container(cfg, resolve=True),
     )
 
-    df = build_all_features(cfg.data.train_dir, cfg.train.gr_rolling_windows)
+    df = build_all_features(cfg.data.train_dir, cfg.train.gr_rolling_windows, cfg.train.enable_beam_features)
 
     feature_cols = [c for c in df.columns if c not in NON_FEATURE_COLS]
 

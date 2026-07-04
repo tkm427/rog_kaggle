@@ -112,18 +112,205 @@ def dtw_alignment_quality(hw: pd.DataFrame, dtw_feat: pd.DataFrame) -> float:
     return float(np.sqrt((err**2).mean())) if prefix_mask.any() else float("nan")
 
 
-def build_feature_frame(hw: pd.DataFrame, tw: pd.DataFrame, gr_rolling_windows: list[int]) -> pd.DataFrame:
+def _smooth_gr_for_beam(values: np.ndarray, fallback: float, radius: int) -> np.ndarray:
+    series = pd.Series(values, dtype="float64").interpolate(limit_direction="both").fillna(fallback)
+    if radius <= 0:
+        return series.to_numpy(dtype=float)
+    return series.rolling(radius * 2 + 1, center=True, min_periods=1).mean().to_numpy(dtype=float)
+
+
+def _nearest_sorted_index(sorted_values: np.ndarray, target: float) -> int:
+    if len(sorted_values) == 0:
+        return 0
+    idx = int(np.searchsorted(sorted_values, target, side="left"))
+    if idx >= len(sorted_values):
+        return len(sorted_values) - 1
+    if idx > 0 and abs(sorted_values[idx - 1] - target) <= abs(sorted_values[idx] - target):
+        return idx - 1
+    return idx
+
+
+def beam_typewell_path(
+    gr_values: np.ndarray,
+    tw_tvt: np.ndarray,
+    tw_gr: np.ndarray,
+    start_tvt: float,
+    beam_size: int = 10,
+    move_cost: float = 20.0,
+    emit_scale: float = 144.0,
+    radius: int = 2,
+) -> tuple[np.ndarray, np.ndarray]:
+    """anchor制約付き beam search（ビタビ風DP）で hw の GR 系列を typewell に整列する。
+
+    pilkwang Notebook（research/rogii-eda-target-free-alignment-for-tvt.ipynb, cell 69）の
+    `beam_typewell_path` を移植。素朴な全系列DTW（exp001、anchor制約・局所遷移なし）が
+    prefix RMSE 50〜260ft で破綻したのに対し、(1) start_tvt 近傍から探索を開始する anchor制約、
+    (2) 1ステップあたり typewell index を ±1 までしか動かさない局所遷移、
+    (3) コスト上位 beam_size 個のみ残す枝刈り、の3点で探索の暴走を防ぐ。
+
+    Returns:
+        matched_tvt: 各 hw 行に対応する typewell TVT（anchor近傍からの整列結果）
+        matched_gr: 整列先の typewell GR 値（残差特徴用）
+    """
+    tw_tvt = np.asarray(tw_tvt, dtype=float)
+    tw_gr = np.asarray(tw_gr, dtype=float)
+    valid_tw = np.isfinite(tw_tvt) & np.isfinite(tw_gr)
+    tw_tvt = tw_tvt[valid_tw]
+    tw_gr = tw_gr[valid_tw]
+    order = np.argsort(tw_tvt)
+    tw_tvt = tw_tvt[order]
+    tw_gr = tw_gr[order]
+
+    n = len(gr_values)
+    if n == 0 or len(tw_tvt) < 2 or not np.isfinite(start_tvt):
+        return np.full(n, np.nan), np.full(n, np.nan)
+
+    fallback = float(np.nanmean(tw_gr)) if np.isfinite(np.nanmean(tw_gr)) else 0.0
+    smoothed_gr = _smooth_gr_for_beam(np.asarray(gr_values, dtype=float), fallback=fallback, radius=radius)
+    start_idx = _nearest_sorted_index(tw_tvt, start_tvt)
+    states = {start_idx: 0.0}
+    backpointers: list[dict[int, int]] = []
+
+    for gr_value in smoothed_gr:
+        if not np.isfinite(gr_value):
+            gr_value = fallback
+        candidates: dict[int, float] = {}
+        parents: dict[int, int] = {}
+        for idx, cost in states.items():
+            for delta in (-1, 0, 1):
+                next_idx = idx + delta
+                if next_idx < 0 or next_idx >= len(tw_tvt):
+                    continue
+                emit_cost = ((gr_value - tw_gr[next_idx]) ** 2) / max(emit_scale, 1e-6)
+                total_cost = cost + emit_cost + move_cost * abs(delta)
+                if next_idx not in candidates or total_cost < candidates[next_idx]:
+                    candidates[next_idx] = float(total_cost)
+                    parents[next_idx] = idx
+        kept = sorted(candidates.items(), key=lambda item: item[1])[:beam_size]
+        if not kept:
+            return np.full(n, np.nan), np.full(n, np.nan)
+        states = {idx: cost for idx, cost in kept}
+        backpointers.append({idx: parents[idx] for idx, _ in kept})
+
+    final_idx = min(states, key=states.get)
+    path = [final_idx]
+    for step in range(len(backpointers) - 1, 0, -1):
+        path.append(backpointers[step][path[-1]])
+    path.reverse()
+    path_arr = np.asarray(path, dtype=int)
+    return tw_tvt[path_arr], tw_gr[path_arr]
+
+
+# tight/conservative/loose の3設定で探索の厳しさを変え、合意度を confidence 特徴として使う。
+# conservative はpilkwangのデフォルト値そのもの。tight は move_cost/emit_scale を下げてGRに
+# 追従しやすくし、loose は逆に上げて anchor 近傍に留まりやすくする。
+_BEAM_PRESETS = {
+    "tight": {"beam_size": 10, "move_cost": 10.0, "emit_scale": 80.0, "radius": 2},
+    "cons": {"beam_size": 10, "move_cost": 20.0, "emit_scale": 144.0, "radius": 2},
+    "loose": {"beam_size": 10, "move_cost": 40.0, "emit_scale": 250.0, "radius": 2},
+}
+
+
+def beam_alignment_features(hw: pd.DataFrame, tw: pd.DataFrame, gr_cal: pd.Series) -> pd.DataFrame:
+    """tail 行に対し anchor制約付き beam search を3設定で実行し、整列特徴を返す（exp002）。
+
+    Offline policy: hw の GR は未来 covariate を含む全シーケンスを使ってよいが、
+    typewell 側の TVT/GR のみを参照し tail の TVT は読まない。
+    """
+    tail_mask = hw["is_tail"].to_numpy()
+    n = len(hw)
+    cols = [
+        "beam_tight_delta", "beam_cons_delta", "beam_loose_delta",
+        "beam_spread", "beam_step", "gr_minus_beam_cons", "gr_minus_beam_loose",
+    ]
+    if tail_mask.sum() == 0:
+        return pd.DataFrame({c: np.full(n, np.nan) for c in cols}, index=hw.index)
+
+    anchor = float(hw["last_known_TVT"].iloc[0])
+    gr_tail = gr_cal.to_numpy()[tail_mask]
+    tw_tvt = tw["TVT"].to_numpy()
+    tw_gr = tw["GR"].to_numpy()
+
+    paths = {}
+    for name, params in _BEAM_PRESETS.items():
+        matched_tvt, matched_gr = beam_typewell_path(gr_tail, tw_tvt, tw_gr, anchor, **params)
+        paths[name] = (matched_tvt, matched_gr)
+
+    tight_tvt, _ = paths["tight"]
+    cons_tvt, cons_gr = paths["cons"]
+    loose_tvt, loose_gr = paths["loose"]
+
+    stacked = np.vstack([tight_tvt, cons_tvt, loose_tvt])
+    spread = np.nanmax(stacked, axis=0) - np.nanmin(stacked, axis=0)
+    step = np.diff(cons_tvt, prepend=cons_tvt[0] if len(cons_tvt) else np.nan)
+
+    tail_feat = pd.DataFrame({
+        "beam_tight_delta": tight_tvt - anchor,
+        "beam_cons_delta": cons_tvt - anchor,
+        "beam_loose_delta": loose_tvt - anchor,
+        "beam_spread": spread,
+        "beam_step": step,
+        "gr_minus_beam_cons": gr_tail - cons_gr,
+        "gr_minus_beam_loose": gr_tail - loose_gr,
+    }, index=hw.index[tail_mask])
+
+    return tail_feat.reindex(hw.index)
+
+
+def beam_alignment_quality(hw: pd.DataFrame, tw: pd.DataFrame, gr_cal: pd.Series, holdout_frac: float = 0.3) -> float:
+    """prefix 区間の後半 holdout_frac を「仮の tail」として切り出し、本番と同じ向き
+    （カットオフ位置を anchor として手前から GR 順方向に beam search）で整列した結果と
+    既知 TVT_input との RMSE を測る sanity check。
+
+    flat anchor（12.8ft）を下回らない限り build_feature_frame に統合しない（exp002必須ゲート）。
+    """
+    prefix_mask = ~hw["is_tail"].to_numpy()
+    prefix_idx = np.where(prefix_mask)[0]
+    if len(prefix_idx) < 10:
+        return float("nan")
+
+    cutoff = int(len(prefix_idx) * (1 - holdout_frac))
+    cutoff = max(cutoff, 1)
+    anchor_pos = prefix_idx[cutoff - 1]
+    holdout_pos = prefix_idx[cutoff:]
+    if len(holdout_pos) < 2:
+        return float("nan")
+
+    anchor = float(hw["TVT_input"].iloc[anchor_pos])
+    gr_holdout = gr_cal.to_numpy()[holdout_pos]
+    tw_tvt = tw["TVT"].to_numpy()
+    tw_gr = tw["GR"].to_numpy()
+
+    matched_tvt, _ = beam_typewell_path(gr_holdout, tw_tvt, tw_gr, anchor, **_BEAM_PRESETS["cons"])
+    true_tvt = hw["TVT_input"].to_numpy()[holdout_pos]
+    err = matched_tvt - true_tvt
+    valid = np.isfinite(err)
+    return float(np.sqrt(np.mean(err[valid] ** 2))) if valid.any() else float("nan")
+
+
+def build_feature_frame(
+    hw: pd.DataFrame,
+    tw: pd.DataFrame,
+    gr_rolling_windows: list[int],
+    enable_beam_features: bool = False,
+) -> pd.DataFrame:
     """1 well 分の行レベル特徴量フレームを構築する。train の場合は resid（学習ターゲット）も付与する。
 
-    DTW は exp002 まで保留（モジュール docstring 参照）。v1 は anchor + trajectory（X,Y,Z 変位, -Z）
-    + GR calibration/rolling/gradient 特徴のみ。
+    v1 は anchor + trajectory（X,Y,Z 変位, -Z）+ GR calibration/rolling/gradient 特徴。
+    `enable_beam_features=True` で exp002 の anchor制約付き beam search 整列特徴を追加する
+    （`beam_alignment_quality` のprefix-holdout sanity checkでflat anchorを下回ることを確認済み）。
+    素朴な全系列DTW（dtw_align）は exp001 で実用不可と判明したため未使用のまま保持。
     """
     gr_cal = calibrate_gr(hw, tw)
     rolling_feat = rolling_gr_features(hw, gr_cal, gr_rolling_windows)
 
-    feat = pd.concat([hw[["well_id", "row_index", "MD", "X", "Y", "Z", "delta_MD",
-                          "delta_X", "delta_Y", "delta_Z", "neg_Z",
-                          "is_tail", "last_known_TVT"]], rolling_feat], axis=1)
+    parts = [hw[["well_id", "row_index", "MD", "X", "Y", "Z", "delta_MD",
+                "delta_X", "delta_Y", "delta_Z", "neg_Z",
+                "is_tail", "last_known_TVT"]], rolling_feat]
+    if enable_beam_features:
+        parts.append(beam_alignment_features(hw, tw, gr_cal))
+
+    feat = pd.concat(parts, axis=1)
 
     if "TVT" in hw.columns:
         feat["TVT"] = hw["TVT"]
