@@ -1,0 +1,31 @@
+FROM python:3.11-slim
+
+WORKDIR /workspace
+
+# kaggle-gpu-images には最初から入っている基本コマンド群。
+# python:3.11-slim には無いので明示的に入れる
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    unzip \
+    curl \
+    wget \
+    git \
+    ca-certificates \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+ENV UV_SYSTEM_PYTHON=1
+ENV UV_LINK_MODE=copy
+
+COPY pyproject.toml uv.lock* ./
+
+# --no-install-project: プロジェクト自体をビルドせず依存だけ入れる
+RUN uv pip install --system -r pyproject.toml || \
+    pip install hydra-core omegaconf wandb scikit-learn
+
+# jupyter は dependency-groups(dev) にあり `-r pyproject.toml` では入らないため明示インストール
+# kaggle CLI も pyproject.toml の依存に含まれていないため明示インストール
+RUN uv pip install --system jupyterlab ipykernel kaggle
+
+COPY . .
