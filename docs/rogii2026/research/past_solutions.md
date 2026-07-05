@@ -132,7 +132,8 @@
 | **GRU / LSTM** | 系列モデル | arXiv 2510.07564（[`papers.md`](./papers.md)）参照。ΔTVT予測+積分復元のアプローチが有力 |
 | **1D-CNN / TCN（Dilated Conv）** | 多重スケールパターン抽出 | 軽量で効きそう |
 | **Transformer + 位置エンコーディング** | 長距離依存 | 終盤のアンサンブル要員 |
-| **Kalman / Particle Filter** | 物理的滑らかさを担保する後処理 | 興味深いが工数大 |
+| **Kalman / Particle Filter** | 物理的滑らかさを担保する後処理 | 興味深いが工数大。2026-06-29調査: nihilisticneuralnet notebook（LB 9.251）が numba実装のPFをbeam/DTW/NCCと並行運用しているのを確認（`research/public_notebooks.md`） |
+| **複数整列手法の冗長アンサンブル**（DTW+PF+beam+NCC を並行特徴化） | 単一手法だと一部ウェルで外れ値が出てもGBDTがそのまま学習してしまう | 2026-06-29調査で pilkwang・nihilisticneuralnet 双方が採用と確認。当プロジェクトのexp002（beam単体）の失敗（`postmortems/pm001_beam_alignment_drift.md`）への直接対策候補 → 優先度高 |
 | **Savitzky-Golay フィルタ** | 滑らかな多項式フィット | 後処理の第一候補。FORCE2020・arXiv論文双方の知見から優先度高 |
 | **Wavelet / DWT 変換** | GR波形の多重解像度特徴 | FORCE2020 2位 + nihilisticneuralnet Notebookで有効性確認 |
 | **Gradient / Rolling Window統計** | 深度方向の1次差分・移動統計 | FORCE2020 TOP3全員 + SEG2016優勝チームで共通 → 最優先で実装 |

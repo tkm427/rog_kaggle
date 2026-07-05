@@ -1,11 +1,12 @@
-"""推論 + submission.csv 生成。
+"""推論 + submission.csv 生成（ローカル/Docker 上での動作確認・OOF検証用）。
 
 scripts/train.py で保存した fold モデルをアンサンブル（平均）し、test wells の tail 行を予測する。
-後処理: 値域クリップのみ（exp001 v1）。DTW信頼度シュリンク等は exp002 以降。
+後処理: 値域クリップのみ（exp001 v1）。
 
-`run_inference` は Hydra/OmegaConf に依存しないプレーンな関数。Kaggle Notebook へコピーする際は
-src/dataset.py, src/features.py, src/model.py の内容（DTW関数は不要）と本関数だけを使い、
-main() の Hydra 部分は使わずプレーンな引数で直接呼び出すこと（CLAUDE.md 運用ルール参照）。
+**Kaggle への実提出にはこのファイルを直接使わない**（Hydra・src/ への import 依存があり、
+Code Competition のインターネット OFF 環境に持ち込めない）。実提出は `kaggle_kernel/submission.ipynb`
+（Hydra抜きの自己完結 Notebook）を使う。このファイル（特に `run_inference` のロジック）を変更したら
+`kaggle_kernel/submission.ipynb` にも同じ変更を反映すること（CLAUDE.md「推論・提出」セクション参照）。
 """
 import glob
 import os
@@ -30,14 +31,19 @@ def run_inference(
     gr_rolling_windows: list[int],
     tvt_min: float,
     tvt_max: float,
+    enable_beam_features: bool = False,
 ) -> pd.DataFrame:
-    """test_dir 配下の全ウェルに対して推論し、submission 用 DataFrame（id, tvt）を返す。"""
+    """test_dir 配下の全ウェルに対して推論し、submission 用 DataFrame（id, tvt）を返す。
+
+    enable_beam_features は scripts/train.py で学習したモデルの特徴セットと必ず一致させること
+    （exp002で beam features 入りモデルと不一致な推論をして特徴名ミスマッチが起きた経緯あり）。
+    """
     well_ids = list_well_ids(test_dir)
     rows = []
     for well_id in well_ids:
         hw = load_well(well_id, test_dir)
         tw = load_typewell(well_id, test_dir)
-        feat = build_feature_frame(hw, tw, gr_rolling_windows)
+        feat = build_feature_frame(hw, tw, gr_rolling_windows, enable_beam_features=enable_beam_features)
 
         tail_feat = feat[feat["is_tail"]].copy()
         feature_cols = [c for c in feat.columns if c not in NON_FEATURE_COLS]
@@ -63,7 +69,8 @@ def main() -> None:
         models = [lgb.Booster(model_file=p) for p in model_paths]
 
         submission = run_inference(
-            models, cfg.data.test_dir, cfg.train.gr_rolling_windows, cfg.data.tvt_min, cfg.data.tvt_max
+            models, cfg.data.test_dir, cfg.train.gr_rolling_windows, cfg.data.tvt_min, cfg.data.tvt_max,
+            enable_beam_features=cfg.train.enable_beam_features,
         )
 
         os.makedirs("outputs", exist_ok=True)

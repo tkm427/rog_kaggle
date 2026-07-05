@@ -42,3 +42,4 @@
 
 | ファイル | 失敗 | 教訓 |
 |---|---|---|
+| pm001_beam_alignment_drift.md | anchor制約付きbeam search（exp002）が短horizonのsanity checkは通過したが、実tail長（平均4867行）では累積driftしOOFを悪化（14.28→14.66） | sanity checkのholdout長は本番適用区間の長さ分布に合わせること |

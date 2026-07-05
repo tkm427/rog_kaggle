@@ -174,6 +174,8 @@ CLAUDE.md の `val_score_rare` / `val_score_common` は分類タスクを想定�
 
 > `PF_SELECTOR_USE_SAME_WELL_PHYSICAL=True` で得た高スコアは「overlap を利用した地質的ショートカット」であり、「未知ウェルへの汎用的な保証」ではない。`True`/`False` 両方で比較するのが診断ペア。
 
+> **実証済み（2026-06-29）**: 公開LB 7.159の「boristown Public Rebuild」notebookが、配布test 3 well（`000d7d20`/`00bbac68`/`00e12e8b`、`eda/train_test_overlap.md`で検出済み）に対し `if wid in train_wells: hw_te['TVT_input'] = hw_tr['TVT_input'].values` という直接的な same-well shortcut を実装していることを確認した（`research/public_notebooks.md`）。**公開LBの上位は train/test 重複ウェルの悪用で大きく底上げされている可能性が高く、Private（隠れ未知ウェル）での再現性は低いと見るべき。** 公開LB順位そのものを目標にせず、GroupKFold OOF（重複ウェルを除外/分離した検証）を信頼する方針を継続する。
+
 ### Column Role Map（pilkwang Section 5）
 
 | Role | 例 | 使い方 |

@@ -7,6 +7,7 @@
 ## カテゴリ別インデックス
 
 ### リーク・データ仕様
+- [ ] **Look Ahead and Data Leakage on Horizontal Well Train and Test Data** (Tiago Soares) — https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction/discussion （直接URL未確定、要検索）— 示唆: **本文未読**（2026-06-29 Web調査でタイトルの存在のみ確認。WebFetchはKaggleのSPAページ本文を取得できずタイトルのみ返却）。タイトルから「look-ahead」が論点と推測されるが、本プロジェクトの `enable_beam_features`（Offline policy = 未来GR全系列を使用）や nihilisticneuralnet notebook（同様にOffline policy）と関連する可能性が高い。**次回セッションでブラウザから本文を直接確認することを推奨**
 - [ ] {タイトル} — {URL} — 示唆:
 
 ### 評価指標・スコアリング

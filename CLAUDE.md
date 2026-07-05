@@ -89,6 +89,7 @@ kaggle_project/
 │       ├── experiments/              # 1 実験 1 ファイル
 │       │   └── exp001_baseline.md
 │       ├── eda/                      # データ理解の発見
+|       |   ├── fig/                  # EDAの可視化
 │       │   └── class_distribution.md
 │       ├── research/                 # 競合・先行研究の調査
 │       │   ├── past_solutions.md
@@ -321,14 +322,29 @@ wandb.log_artifact(artifact)
 ## 推論・提出
 
 推論ロジックは **`scripts/make_submission.py` に集約**（`src/inference.py` は作らない）。
+ローカル/Docker 上での動作確認・OOF 検証用。
 
 ```bash
 docker compose exec workspace python scripts/make_submission.py
 # → outputs/submission.csv が生成される
 ```
 
-Kaggle 提出時は `make_submission.py` の内容を Notebook にコピーして使う。
-新しい推論手法（TTA・アンサンブル等）を試すときは `make_submission.py` を直接書き換えず、関数を追加して config で切り替える。
+**Kaggle への実提出は `make_submission.py` を直接使わない**（Hydra・`src/` への import 依存があり、
+Code Competition のインターネット OFF 環境にそのまま持ち込めない）。代わりに
+**`kaggle_kernel/submission.ipynb`** を正本として維持する（`src/dataset.py` / `src/features.py` の
+必要な関数と `make_submission.py::run_inference` 相当のロジックを Hydra 抜きの自己完結コードとして
+埋め込んだ Notebook。運用詳細は `kaggle_kernel/README.md` 参照）。
+
+**ルール**: `src/dataset.py` / `src/features.py` / `scripts/make_submission.py` の
+**有効化されている（config のデフォルトで実際に実行される）推論経路**に変更が入ったら、
+**同じ変更を `kaggle_kernel/submission.ipynb` にも反映してから実験を完了とする**
+（`experiments.md` を更新する前に確認する）。`enable_xxx: false` のまま無効化されている
+実験的機能（ABANDONED 含む）は、有効化するまで Notebook に移植する必要はない
+（exp001 の `dtw_align` 同様、未使用ロジックは Notebook に持ち込まない方針）。
+学習済みモデルの更新だけなら Notebook の再 push は不要（`kaggle datasets version` でモデル
+Dataset のみ更新）。
+
+新しい推論手法（TTA・アンサンブル等）を試すときは `make_submission.py` を直接書き換えず、関数を追加して config で切り替える。Notebook 側も対応する関数を追加する形で同期する。
 
 ---
 
@@ -351,6 +367,9 @@ Kaggle 提出時は `make_submission.py` の内容を Notebook にコピーし�
 | `scripts/analyze_per_class_auc.py` | クラス別スコア分析（稀少 vs 頻出） | `--model`, `--data` | クラス別スコアテーブル |
 | `scripts/analyze_cv_lb_corr.py` | ローカル CV と LB の相関分析 | `--exp` | 散布図・相関係数 |
 | `scripts/eda_overview.py` | データ全体の俯瞰 EDA | なし | ウェル数・行数・TVT分布・GRシフト・null model RMSE |
+| `scripts/analyze_beam_alignment_quality.py` | beam search alignment（exp002）のprefix-holdout sanity check | `--train-dir`, `--n-wells`, `--seed` | flat anchor比較RMSE。holdout長は固定30%のため長horizon検証には不十分（pm001参照） |
+| `scripts/visualize_beam_alignment_drift.py` | beam search alignment（pm001）のドリフト・fit品質の可視化 | `--train-dir`, `--n-wells`, `--seed` | `postmortems/fig/pm001_drift_vs_step.png`（ステップ数別RMSE）, `pm001_path_overlay.png`（true vs beam vs flat anchorパス）, `pm001_rmse_distribution.png`（holdout30%/90%のRMSE分布比較） |
+| `scripts/analyze_per_well_rmse.py` | ウェル別残差分析（exp003）。tail長・rare行比率とOOF RMSEの相関、外れ値ウェル抽出 | `--oof-path`, `--rare-threshold`, `--top-n` | `eda/fig/exp003_per_well_rmse.csv`, `exp003_rmse_histogram.png`, `exp003_rmse_vs_tail_length.png`, `exp003_rmse_vs_rare_frac.png`, `exp003_worst_wells.png` |
 
 ---
 
