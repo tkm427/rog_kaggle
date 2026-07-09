@@ -11,3 +11,8 @@ gr_rolling_windows: [10, 30, 100]
 # 通過したが、実際のtail長（平均4867行）では累積drift（RMSE 100〜500ft）が発生しOOFを悪化させた）。
 # 関数自体は将来の再設計用に残し、デフォルトでは無効化する。
 enable_beam_features: false
+
+# trajectory-GR不一致度特徴量（exp004, H10）。デフォルト無効。
+enable_disagreement_features: false
+# 有効にするグループ番号リスト（null=全グループ [1,2,3]）。exp004b=Group 1のみ。
+disagreement_groups: null

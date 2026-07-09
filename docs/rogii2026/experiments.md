@@ -4,15 +4,17 @@
 
 ## 現在のフォーカス
 
-exp003（ウェル別残差分析）完了。事前予測（tail長・rare比率との相関）は**反証**され、実際の弱点は
-「trajectory(-Z)とGRベースのTVT変位が食い違う（符号反転含む）ウェル」と判明（corr(RMSE, abs_net_drift)=0.580）。
-詳細は `experiments/exp003_per_well_residual.md`。
+exp004（trajectory-GR不一致度特徴量）完了。全体OOF RMSE 14.3241（baseline 14.28より微増）。
+符号反転ウェルの一部は改善したが全体ではわずかに悪化。GR NN（Group 3）のノイズとrolling corrの
+情報量不足が主因と推測。詳細は `experiments/exp004_trajectory_gr_disagreement.md`。
 
-次は **H9アンサンブル（PF/beam/DTW/NCC + CatBoost + Ridge stack）着手、または先にH10（trajectory-GR不一致度を
-特徴量化する小実験）で仮説検証** のいずれかが候補。理由: exp003でtrajectory単独に依存するモデルの系統的弱点
-（trajectoryとTVTの局所的デカップリング）が特定できたため、trajectory非依存の情報源（GR系列アンサンブル）が
-有効なはず。pm001（beam alignment失敗、急峻ジャンプへの追従失敗）とは異なるメカニズムである点に注意。
-他の未着手タスク: `discussions.md` の実調査。
+exp004b（H10 prefix相関のみ）完了。OOF 14.2955（baseline 14.28より微増）。
+H10アプローチ（trajectory-GR不一致度をスカラー特徴量化）は baseline を超えられず終了。
+理由: 「ウェルレベルのスカラー信頼度フラグ」ではLightGBMが他特徴量を動的に下重みできない構造的限界。
+
+**次のフォーカス候補:**
+- **H3（後処理スムージング）**: Savitzky-Golay → 1-2時間で試せる軽量オプション
+- **H9（GR系列アンサンブル）**: PF/DTW/NCC + CatBoost + Ridge stack → trajectory非依存の本格的アプローチ（重い）
 
 ## 実験一覧
 
@@ -21,6 +23,8 @@ exp003（ウェル別残差分析）完了。事前予測（tail長・rare比率
 | exp001 | Anchor+Trajectory+GR特徴でLightGBM残差モデルがflat anchor(15.91)を改善する | GroupKFold(well_id,5) + LightGBM残差予測 | 14.28（rare 13.84 / common 14.28） | 12.959 | DONE | DTWは性能・精度問題で除外（exp002へ）。submission.csv生成・フォーマット確認済み、提出済み |
 | exp002 | anchor制約付きbeam search（pilkwang `beam_typewell_path`移植）でtypewell整列特徴を追加すればOOFが改善する | beam_alignment_features（tight/cons/loose） + LightGBM残差予測 | 14.66（rare 13.88 / common 14.66、exp001比+0.38悪化） | 未提出 | ABANDONED | 短horizon sanity checkは通過したが実tail長で累積drift。`postmortems/pm001_beam_alignment_drift.md` |
 | exp003 | baselineモデルはtail長/rare比率の高いウェルで弱いはず | scripts/analyze_per_well_rmse.py でウェル別RMSE分析（n=773） | 14.28（baseline再現） | - | DONE | 事前予測は反証。実際の弱点はtrajectory(-Z)とTVTのネット変位が食い違うウェル（corr 0.580）。`experiments/exp003_per_well_residual.md` |
+| exp004 | trajectory-GR不一致度を特徴量化すればモデルが「trajectory非信頼区間」を学習しRMSEが改善する（H10） | prefix相関×4 + rolling GR-negZ corr×3 + GR NN TVT×2 を追加 | 14.3241（rare 14.3037 / common 14.3241、**baseline比+0.04悪化**） | 未提出 | DONE | 符号反転ウェル一部は改善（a8ed028a top10圏外へ）したが他ウェルでregression。Group 3(GR NN)のノイズとGroup 2の情報量不足が原因と推測。`experiments/exp004_trajectory_gr_disagreement.md` |
+| exp004b | exp004でGroup2・3がノイズという仮説検証: prefix相関4特徴のみに絞ればbaselineを超えるはず | disagreement_groups=[1]（prefix相関×4のみ） | 14.2955（rare 13.9856 / common 14.2955、**baseline比+0.015 微悪化**） | 未提出 | DONE | ノイズ源除去仮説は確認（exp004 14.32→14.30改善）。ただしbaseline(14.28)には届かず。prefix相関スカラー単体でLightGBMへの情報伝達が不十分と結論。H10アプローチ終了。 |
 
 新しい実験を追加したら必ず 1 行追加する。状態は `TODO / RUNNING / DONE / ABANDONED`。
 

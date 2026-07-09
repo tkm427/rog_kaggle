@@ -1,0 +1,7 @@
+# exp004: trajectory-GR不一致度特徴量（H10）
+# baseline (exp001) に9特徴を追加: prefix相関×4 / rolling GR-negZ corr×3 / GR NN TVT×2
+rare_threshold: 0.91
+train_on_tail_only: true
+gr_rolling_windows: [10, 30, 100]
+enable_beam_features: false
+enable_disagreement_features: true

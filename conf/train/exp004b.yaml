@@ -1,0 +1,8 @@
+# exp004b: trajectory-GR不一致度特徴量 Group 1のみ（prefix相関4特徴）
+# exp004でGroup 2(rolling corr)とGroup 3(GR NN)がノイズになった仮説を検証
+rare_threshold: 0.91
+train_on_tail_only: true
+gr_rolling_windows: [10, 30, 100]
+enable_beam_features: false
+enable_disagreement_features: true
+disagreement_groups: [1]

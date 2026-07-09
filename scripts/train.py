@@ -24,13 +24,24 @@ from src.model import LGBMResidualModel
 NON_FEATURE_COLS = ["well_id", "row_index", "is_tail", "TVT", "resid", "tvt_diff_abs"]
 
 
-def build_all_features(train_dir: str, gr_rolling_windows: list[int], enable_beam_features: bool) -> pd.DataFrame:
+def build_all_features(
+    train_dir: str,
+    gr_rolling_windows: list[int],
+    enable_beam_features: bool,
+    enable_disagreement_features: bool,
+    disagreement_groups: list[int] | None = None,
+) -> pd.DataFrame:
     well_ids = list_well_ids(train_dir)
     frames = []
     for well_id in well_ids:
         hw = load_well(well_id, train_dir)
         tw = load_typewell(well_id, train_dir)
-        feat = build_feature_frame(hw, tw, gr_rolling_windows, enable_beam_features=enable_beam_features)
+        feat = build_feature_frame(
+            hw, tw, gr_rolling_windows,
+            enable_beam_features=enable_beam_features,
+            enable_disagreement_features=enable_disagreement_features,
+            disagreement_groups=disagreement_groups,
+        )
         feat["tvt_diff_abs"] = hw["TVT"].diff().abs().to_numpy()
         frames.append(feat)
     return pd.concat(frames, ignore_index=True)
@@ -50,7 +61,14 @@ def main(cfg: DictConfig) -> None:
         config=OmegaConf.to_container(cfg, resolve=True),
     )
 
-    df = build_all_features(cfg.data.train_dir, cfg.train.gr_rolling_windows, cfg.train.enable_beam_features)
+    disagreement_groups = list(cfg.train.disagreement_groups) if cfg.train.get("disagreement_groups") else None
+    df = build_all_features(
+        cfg.data.train_dir,
+        cfg.train.gr_rolling_windows,
+        cfg.train.enable_beam_features,
+        cfg.train.enable_disagreement_features,
+        disagreement_groups=disagreement_groups,
+    )
 
     feature_cols = [c for c in df.columns if c not in NON_FEATURE_COLS]
 

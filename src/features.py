@@ -288,17 +288,109 @@ def beam_alignment_quality(hw: pd.DataFrame, tw: pd.DataFrame, gr_cal: pd.Series
     return float(np.sqrt(np.mean(err[valid] ** 2))) if valid.any() else float("nan")
 
 
+def trajectory_gr_disagreement_features(
+    hw: pd.DataFrame,
+    tw: pd.DataFrame,
+    gr_cal: pd.Series,
+    windows: list[int],
+    groups: list[int] | None = None,
+) -> pd.DataFrame:
+    """H10: trajectory(-Z)とGRベース整列の不一致度を特徴量化（exp004）。
+
+    exp003でLightGBMがtrajectory系を94%使用しGRをほぼ無視と判明。
+    worst 10ウェルの4/10でtraj(-Z)とTVTのネット変位符号が逆転 → このシグナルを特徴量化。
+
+    Group 1 (4特徴): prefix内でのneg_Z/GRとTVTの相関 → ウェルレベルでbroadcast
+    Group 2 (3特徴): rolling窓でのGRとneg_Z勾配の相関 → 行レベル
+    Group 3 (2特徴): typewell GR最近傍マッチングTVT → 行レベル（trajectory非依存推定値）
+
+    リーク管理: Group 1はprefix TVT_input（既知値）のみ使用。Group 2はTVT未使用。
+    Group 3はtypewell TVT/GR（参照ウェル）のみ使用。
+    """
+    n = len(hw)
+    active = set(groups) if groups is not None else {1, 2, 3}
+
+    out: dict[str, np.ndarray] = {}
+
+    # --- Group 1: prefix-level correlations ---
+    if 1 in active:
+        prefix_mask = ~hw["is_tail"]
+        prefix_negz = hw.loc[prefix_mask, "neg_Z"]
+        prefix_gr = gr_cal[prefix_mask]
+        prefix_tvt = hw.loc[prefix_mask, "TVT_input"]
+
+        if prefix_mask.sum() >= 5:
+            corr_negz_tvt = float(prefix_negz.corr(prefix_tvt))
+            corr_gr_tvt = float(prefix_gr.corr(prefix_tvt))
+            tvt_diff = prefix_tvt.diff().dropna()
+            valid_idx = tvt_diff.index
+            negz_diff = prefix_negz.diff()[valid_idx]
+            gr_diff_p = prefix_gr.diff()[valid_idx]
+            corr_negz_tvt_diff = float(negz_diff.corr(tvt_diff)) if len(tvt_diff) >= 3 else 0.0
+            corr_gr_tvt_diff = float(gr_diff_p.corr(tvt_diff)) if len(tvt_diff) >= 3 else 0.0
+        else:
+            corr_negz_tvt = corr_gr_tvt = corr_negz_tvt_diff = corr_gr_tvt_diff = 0.0
+
+        out["prefix_corr_negz_tvt"] = np.full(n, corr_negz_tvt if np.isfinite(corr_negz_tvt) else 0.0)
+        out["prefix_corr_gr_tvt"] = np.full(n, corr_gr_tvt if np.isfinite(corr_gr_tvt) else 0.0)
+        out["prefix_corr_negz_tvt_diff"] = np.full(n, corr_negz_tvt_diff if np.isfinite(corr_negz_tvt_diff) else 0.0)
+        out["prefix_corr_gr_tvt_diff"] = np.full(n, corr_gr_tvt_diff if np.isfinite(corr_gr_tvt_diff) else 0.0)
+
+    # --- Group 2: rolling GR vs neg_Z gradient correlation ---
+    if 2 in active:
+        gr_diff_all = gr_cal.diff().fillna(0.0)
+        negz_diff_all = hw["neg_Z"].diff().fillna(0.0)
+        for w in windows:
+            roll_corr = gr_diff_all.rolling(w, min_periods=max(w // 3, 5)).corr(negz_diff_all).fillna(0.0)
+            out[f"gr_negz_roll_corr_{w}"] = roll_corr.to_numpy()
+
+    # --- Group 3: typewell GR nearest-neighbor TVT ---
+    if 3 in active:
+        tw_gr_raw = tw["GR"].to_numpy()
+        tw_tvt_raw = tw["TVT"].to_numpy()
+        valid = np.isfinite(tw_gr_raw) & np.isfinite(tw_tvt_raw)
+        tw_gr_v = tw_gr_raw[valid]
+        tw_tvt_v = tw_tvt_raw[valid]
+        gr_arr = gr_cal.fillna(gr_cal.mean()).to_numpy()
+
+        if len(tw_gr_v) >= 2:
+            sorted_idx = np.argsort(tw_gr_v)
+            tw_gr_s = tw_gr_v[sorted_idx]
+            tw_tvt_s = tw_tvt_v[sorted_idx]
+
+            pos = np.searchsorted(tw_gr_s, gr_arr).clip(0, len(tw_gr_s) - 1)
+            pos_m1 = np.maximum(pos - 1, 0)
+            dist_pos = np.abs(tw_gr_s[pos] - gr_arr)
+            dist_m1 = np.abs(tw_gr_s[pos_m1] - gr_arr)
+            best = np.where(dist_pos <= dist_m1, pos, pos_m1)
+
+            gr_nn_tvt = tw_tvt_s[best]
+            gr_nn_cost = np.where(dist_pos <= dist_m1, dist_pos, dist_m1)
+        else:
+            gr_nn_tvt = np.full(n, np.nan)
+            gr_nn_cost = np.full(n, np.nan)
+
+        out["gr_nn_tvt_delta"] = gr_nn_tvt - hw["last_known_TVT"].to_numpy()
+        out["gr_nn_cost"] = gr_nn_cost
+
+    return pd.DataFrame(out, index=hw.index)
+
+
 def build_feature_frame(
     hw: pd.DataFrame,
     tw: pd.DataFrame,
     gr_rolling_windows: list[int],
     enable_beam_features: bool = False,
+    enable_disagreement_features: bool = False,
+    disagreement_groups: list[int] | None = None,
 ) -> pd.DataFrame:
     """1 well 分の行レベル特徴量フレームを構築する。train の場合は resid（学習ターゲット）も付与する。
 
     v1 は anchor + trajectory（X,Y,Z 変位, -Z）+ GR calibration/rolling/gradient 特徴。
     `enable_beam_features=True` で exp002 の anchor制約付き beam search 整列特徴を追加する
     （`beam_alignment_quality` のprefix-holdout sanity checkでflat anchorを下回ることを確認済み）。
+    `enable_disagreement_features=True` で exp004 の trajectory-GR不一致度特徴を追加する。
+    `disagreement_groups` で有効化するグループ（1/2/3）を絞り込める（Noneは全グループ）。
     素朴な全系列DTW（dtw_align）は exp001 で実用不可と判明したため未使用のまま保持。
     """
     gr_cal = calibrate_gr(hw, tw)
@@ -309,6 +401,8 @@ def build_feature_frame(
                 "is_tail", "last_known_TVT"]], rolling_feat]
     if enable_beam_features:
         parts.append(beam_alignment_features(hw, tw, gr_cal))
+    if enable_disagreement_features:
+        parts.append(trajectory_gr_disagreement_features(hw, tw, gr_cal, gr_rolling_windows, groups=disagreement_groups))
 
     feat = pd.concat(parts, axis=1)
 
