@@ -22,37 +22,45 @@ kaggle_project/
 │   ├── data/
 │   └── train/
 ├── src/
-│   ├── dataset.py
-│   ├── model.py
-│   ├── train.py
-│   └── utils/wandb_utils.py  # W&Bヘルパー
+│   ├── dataset.py             # データロード・前処理
+│   ├── features.py            # 特徴量生成
+│   └── model.py               # モデル定義
 ├── scripts/
 │   ├── train.py               # 学習エントリポイント（Hydra）
 │   ├── make_submission.py     # 推論 + submission.csv 生成
 │   └── analyze_*.py           # 分析スクリプト（再利用可能）
+├── kaggle_kernel/             # Code Competition 提出用 notebook（正本）
 ├── notebooks/                 # EDA・可視化のみ（本番コード禁止）
 ├── wandb/                  # W&B実験ログ（Git管理外）
 ├── data/
 │   ├── raw/                   # Kaggle 生データ（Git 管理外）
 │   └── processed/             # 前処理済みデータ（Git 管理外）
 ├── docs/
+│   ├── _templates/            # 新コンペ用の雛形（/kaggle-new がコピー）
 │   └── {competition}/
 │       ├── competition_overview.md   # コンペ仕様（静的）
-│       ├── strategy.md               # 戦略・時間配分・週次ふりかえり
-│       ├── experiments.md            # 実験インデックス・現在のフォーカス
+│       ├── strategy.md               # 時間予算・戦略・週次ふりかえり
+│       ├── formulations.md           # 定式化候補ボード
+│       ├── experiments.md            # 実験インデックス・CV-LB 表
+│       ├── tools.md                  # 分析ツールカタログ
 │       ├── experiments/              # 1 実験 1 ファイル
-│       │   └── exp001_baseline.md
 │       ├── eda/                      # データ理解の発見
-│       │   └── class_distribution.md
-│       ├── research/                 # 競合・先行研究の調査
-│       │   ├── past_solutions.md
-│       │   ├── discussions.md
-│       │   ├── public_notebooks.md
-│       │   └── papers.md
+│       ├── research/                 # Discussion・過去解法・公開NB・論文
 │       └── postmortems/              # 重要な失敗の深掘り
-│           └── pm001_aug_failed.md
 └── outputs/                   # チェックポイント・submission（Git 管理外）
 ```
+
+## ワークフロー
+
+コンペの進め方の規約は **`CLAUDE.md`** に集約されている（フェーズごとのゲート・実験の規律・
+提出頻度・情報収集のルール）。Claude Code 用のスラッシュコマンド:
+
+| コマンド | 用途 |
+|---|---|
+| `/kaggle-start` | セッション開始チェック（フェーズ・未達ゲート・時間予算・警告） |
+| `/kaggle-exp` | 新実験の開始（仮説・事前予測・ゲート基準を先に書かせ、2ストライクなら停止） |
+| `/kaggle-audit` | 週次セルフ監査（7項目のドリフト検査） |
+| `/kaggle-new <slug>` | 新コンペの立ち上げ（`docs/_templates/` から生成） |
 
 ## セットアップ
 
@@ -177,20 +185,29 @@ docker compose exec workspace python scripts/train.py \
 
 ## 実験管理（W&B）
 
-`src/utils/wandb_utils.py` のヘルパーを使って実験をログする。
+学習エントリポイントは `scripts/train.py`（Hydra）。命名規則と必須ログ項目は
+`CLAUDE.md` 第10節に従う。
 
 ```python
-from src.utils.wandb_utils import start_run, log_cv_results
+import wandb
+from omegaconf import OmegaConf
 
-with start_run(project="my-competition", run_name="lgbm-baseline"):
-    wandb.config.update({"n_estimators": 1000, "learning_rate": 0.05})
+wandb.init(
+    project=cfg.wandb.project,          # phase 名: baseline / model_search / ensemble / final
+    name=cfg.wandb.run_name,            # YYYYMMDD_{model}_{変更点}
+    config=OmegaConf.to_container(cfg, resolve=True),
+)
+wandb.log({
+    "val_score": val_score,
+    "val_score_rare": val_score_rare,     # 層別スコアは必須
+    "val_score_common": val_score_common,
+    "val_loss": val_loss,
+    "train_loss": train_loss,
+}, step=epoch)
 
-    scores = cross_validate(model, X, y)
-    log_cv_results(scores)
-
-    artifact = wandb.Artifact("submission", type="submission")
-    artifact.add_file("outputs/submission.csv")
-    wandb.log_artifact(artifact)
+artifact = wandb.Artifact("submission", type="submission")
+artifact.add_file("outputs/submission.csv")
+wandb.log_artifact(artifact)
 ```
 
 実験結果はW&Bのダッシュボードで確認できる → https://wandb.ai/\<entity\>/\<project\>

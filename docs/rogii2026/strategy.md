@@ -2,6 +2,26 @@
 
 > このファイルは「**今週何をするか**」を決めるための作業ドキュメント。週次で更新する。静的なコンペ仕様は `competition_overview.md`、実験ログは `experiments.md`。
 
+## 時間予算（最終値・事後記入）
+
+```
+更新日: 2026-08-05
+残り日数: 0
+1実験の平均所要: 4
+残り実験可能数: 0
+現在の best: 14.28
+目標: 7.0
+残距離: 7.28
+null: 15.91
+計画中の実験段数: 6
+今週の提出回数: 0
+現在のフェーズ: Phase 1
+未達ゲート: R2, R5
+```
+
+> 事後記入。当時このブロックがあれば「7/17 時点で残り19日・平均4日 → 実行可能 4〜5本」に対し
+> exp007〜exp012 の 6 段計画が過大だと即座に分かった。
+
 ## コンペ期間と時間配分
 
 - 開始: 2026-05-05
@@ -47,7 +67,24 @@
 6. **[H6] 近隣ウェル（X, Y 座標）の TVT を空間特徴として使うと改善**  
    → pilkwang の Section 13 "Nearby-Well Spatial Signal" を参考に
 7. **[H9] 単一整列手法ではなくDTW/PF/beam/NCCを並行アンサンブルし、CatBoost追加+Ridge stack+Savitzky-Golay後処理を組み合わせれば、exp001(OOF 14.28)からboristown notebookのlegitimate GroupKFold OOF相当(10.42)に近づけるはず**（2026-06-29調査、`research/public_notebooks.md`）  
-   → pm001（beam単体の外れ値問題）への直接対策。exp003完了で次の最優先候補に確定（trajectory-TVTデカップリングwellsを優先ターゲットにできるはず）
+   → pm001（beam単体の外れ値問題）への直接対策。exp003完了で次の最優先候補に確定（trajectory-TVTデカップリングwellsを優先ターゲットにできるはず）。着手開始（2026-07-17）。
+
+   **H9ステージ設計（exp005〜exp012、各stageに定量gate基準）:**
+
+   | exp | 内容 | 状態 | 主なgate基準 |
+   |---|---|---|---|
+   | exp005 | real-tail評価ハーネス + decoupled-well判定（インフラ） | DONE | beam再現: mean RMSE 11.85±1.0ft, flat割合73.3±5pp |
+   | exp006 | Multi-scale NCC整列特徴 | ABANDONED | mean≤13.0ft, max≤45ft, outlier率≤10%, decoupled subsetでflat anchorに勝つ → **不合格**（mean 56.65ft）。原因: MD/TVTサンプリング密度不一致 |
+   | exp007 | Sakoe-Chiba banded DTW（要numba検討、次の最優先） | TODO | 同上基準（局所傾きを動的に追従するバンドでexp006の問題に直接対策） |
+   | exp008 | Particle Filter（trajectory-informed transition + prefix由来obs_sigma） | TODO | 同上基準 |
+   | exp009 | 整列手法統合 — **H9の核心go/no-go** | TODO | OOF≤13.28（exp001比-1.0以上改善）, p90≤20.15, max≤72.35, decoupled subset≥15%改善 |
+   | exp010 | CatBoostResidualModel追加 | TODO | 単体OOF≤LGBMの1.15倍 かつ 誤差相関<0.95 |
+   | exp011 | Ridge meta-stack（fold-consistent） | TODO | stacked OOFがmin(lgbm,catboost)より0.3以上改善 |
+   | exp012 | Savitzky-Golay + warm-up decay後処理 | TODO | OOF 0.1以上改善 かつ rare regime p90悪化なし |
+
+   exp009合格時点で初めて`conf/train/default.yaml`のenable flagを昇格させ、
+   `kaggle_kernel/submission.ipynb`への同期義務が発生する。exp009不合格の場合は1回だけablationし、
+   それでも改善しなければH9はそこで打ち切り（postmortem対象）。
 8. **[H10] trajectory(-Z)とGRベース整列の不一致度（disagreement, signed/abs）を特徴量化すれば、LightGBMが「trajectory予測を信用できない区間」を学習し系統誤差が減るはず**（2026-06-29、exp003の発見より）  
    → exp003でworst 10ウェルの4/10がtrajectory変位とTVT変位の符号すら反転していたことが根拠。H9（重いアンサンブル）着手前に軽量に検証できる候補
 
@@ -91,3 +128,15 @@
 ### Week 2 (2026-06-22 〜)
 
 - ...
+---
+
+## 最終結果とふりかえり（2026-08-21 追記）
+
+コンペ終了。**private 12.693 / public 12.959、4365位 / 6125チーム、提出 1 回**（exp001、締切2ヶ月前）。
+上位: 1st 5.639 / 2nd 5.802 / 3rd 5.836、49位 6.999。flat anchor（null model）は約 15.9。
+
+- 上位解法の要約 → `research/top_solutions.md`
+- 全体ふりかえり（5 Why と次回のルール変更案）→ `postmortems/pm002_competition_retrospective.md`
+
+このファイルの当初の想定スケジュール（Week 4-7 のアンサンブル・最終調整）は実行されなかった。
+git log は 2026-07-09 で停止、実験記録は 07-17 の exp006 が最後で、**終盤 3 週間の活動記録が無い**。

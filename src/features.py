@@ -288,6 +288,174 @@ def beam_alignment_quality(hw: pd.DataFrame, tw: pd.DataFrame, gr_cal: pd.Series
     return float(np.sqrt(np.mean(err[valid] ** 2))) if valid.any() else float("nan")
 
 
+# note: 以下のNCC関数群（H9/exp006）は real-tail 評価で mean RMSE 56.65ft
+# （flat anchor 12.8ft・gate閾値13.0ftのいずれにも遠く届かない）となり ABANDONED。
+# 原因: horizontal well側(GR-vs-MD, ~1ft/row)とtypewell側(GR-vs-TVT, ~0.5ft/sample)の
+# サンプリング密度が水平坑井のdTVT/dMD（ウェルごとに大きくばらつく）のせいで対応せず、
+# 同サンプル数窓の相関比較が物理的に異なる深度スパンを比較してしまう。窓幅を物理TVT-ft幅に
+# 換算する修正も試したが（要ウェル固有の局所傾き推定＝結局DTW/beam/PFが解く問題と同じ）
+# 改善せず(10wellでmean 70〜90ft)。詳細は `experiments/exp006_ncc_alignment.md` 参照。
+# 関数自体は将来の再設計用に残す（dtw_align と同じ扱い）。dtw_alignと同様
+# build_feature_frame からは呼ばれていない。
+def _ncc_candidate_window(
+    tw_tvt: np.ndarray, tw_gr: np.ndarray, center_tvt: float, search_radius_tvt: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """typewellをTVT順に並べ、center_tvt±search_radius_tvtに絞った候補(tvt, gr)を返す。"""
+    valid = np.isfinite(tw_tvt) & np.isfinite(tw_gr)
+    tvt_s, gr_s = tw_tvt[valid], tw_gr[valid]
+    order = np.argsort(tvt_s)
+    tvt_s, gr_s = tvt_s[order], gr_s[order]
+    lo, hi = center_tvt - search_radius_tvt, center_tvt + search_radius_tvt
+    mask = (tvt_s >= lo) & (tvt_s <= hi)
+    return tvt_s[mask], gr_s[mask]
+
+
+def _ncc_keyframe_indices(n: int, stride: int) -> np.ndarray:
+    idx = list(range(0, n, max(stride, 1)))
+    if not idx or idx[-1] != n - 1:
+        idx.append(n - 1)
+    return np.asarray(idx)
+
+
+def _ncc_scale_matches_at_keyframes(
+    gr_arr: np.ndarray, cand_tvt: np.ndarray, cand_gr: np.ndarray, w: int, keyframe_idx: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    """1スケール分: keyframe位置ごとにcand_gr内で最良相関の窓を独立に探す
+    （beamの局所遷移と異なりkeyframe間で状態を持ち越さないため、一区間の誤マッチが
+    後続に伝播しない）。中心のtvt/gr/相関値をkeyframeの数だけ返す。
+    """
+    n_cand = len(cand_gr)
+    if n_cand < w or w < 2:
+        return None
+
+    pad_left = w // 2
+    pad_right = (w - 1) - pad_left
+    padded = np.pad(gr_arr, (pad_left, pad_right), mode="edge")
+    obs_windows = np.lib.stride_tricks.sliding_window_view(padded, w)[keyframe_idx]  # (n_kf, w)
+    obs_mean = obs_windows.mean(axis=1, keepdims=True)
+    obs_std = obs_windows.std(axis=1, keepdims=True)
+    obs_z = (obs_windows - obs_mean) / np.where(obs_std < 1e-8, 1.0, obs_std)
+
+    cand_windows = np.lib.stride_tricks.sliding_window_view(cand_gr, w)  # (n_cand-w+1, w)
+    cand_mean = cand_windows.mean(axis=1, keepdims=True)
+    cand_std = cand_windows.std(axis=1, keepdims=True)
+    cand_z = (cand_windows - cand_mean) / np.where(cand_std < 1e-8, 1.0, cand_std)
+
+    corr = (obs_z @ cand_z.T) / w  # (n_kf, n_cand-w+1)
+    best_k = np.argmax(corr, axis=1)
+    best_corr = corr[np.arange(len(keyframe_idx)), best_k]
+    center_idx = best_k + pad_left
+    return cand_tvt[center_idx], cand_gr[center_idx], best_corr
+
+
+def ncc_typewell_path(
+    gr_values: np.ndarray,
+    tw_tvt: np.ndarray,
+    tw_gr: np.ndarray,
+    start_tvt: float,
+    windows: tuple[int, ...] = (8, 15, 25),
+    search_radius_tvt: float = 150.0,
+    stride: int = 15,
+) -> tuple[np.ndarray, np.ndarray]:
+    """anchor近傍(start_tvt±search_radius_tvt)に限定したtypewell区間に対し、複数スケールの
+    正規化相互相関(NCC)でGR系列を独立に整列する（exp006, H9）。`beam_typewell_path`と同じ
+    matcherインタフェース規約（`scripts/analyze_alignment_quality.py::MATCHERS`から呼ばれる）。
+
+    beam_typewell_pathは1ステップごとの局所遷移でパスを積み上げるため、真のTVTが急変する
+    区間で一度外れると誤りが後続に伝播する(pm001)。NCCはstride間隔の各キーフレームで
+    毎回ゼロから最良位置を探すため、一区間の誤マッチが後続区間に伝播しない。探索範囲を
+    start_tvt近傍に固定することで、暴走的な誤マッチ自体も物理的に防ぐ
+    （長いtailで実際の変位がsearch_radius_tvtを超えるウェルでは境界にクリップされる制約が残るが、
+    exp003で観測された正味変位は最大でも~91ftのため150ftのデフォルト半径はおおむね妥当）。
+
+    Returns:
+        matched_tvt: 各行に対応するtypewell TVT（3スケールの中央値、キーフレーム間は線形補間）
+        matched_gr: 整列先のtypewell GR値（残差特徴用）
+    """
+    n = len(gr_values)
+    if n == 0 or not np.isfinite(start_tvt):
+        return np.full(n, np.nan), np.full(n, np.nan)
+
+    cand_tvt, cand_gr = _ncc_candidate_window(
+        np.asarray(tw_tvt, dtype=float), np.asarray(tw_gr, dtype=float), start_tvt, search_radius_tvt
+    )
+    if len(cand_tvt) < 2:
+        return np.full(n, start_tvt), np.full(n, np.nan)
+
+    gr_filled = pd.Series(gr_values, dtype="float64").interpolate(limit_direction="both")
+    fallback = float(gr_filled.mean()) if np.isfinite(gr_filled.mean()) else 0.0
+    gr_arr = gr_filled.fillna(fallback).to_numpy()
+    keyframe_idx = _ncc_keyframe_indices(n, stride)
+
+    scale_tvt, scale_gr = [], []
+    for w in windows:
+        result = _ncc_scale_matches_at_keyframes(gr_arr, cand_tvt, cand_gr, w, keyframe_idx)
+        if result is None:
+            continue
+        matched_tvt_kf, matched_gr_kf, _ = result
+        scale_tvt.append(np.interp(np.arange(n), keyframe_idx, matched_tvt_kf))
+        scale_gr.append(np.interp(np.arange(n), keyframe_idx, matched_gr_kf))
+
+    if not scale_tvt:
+        return np.full(n, start_tvt), np.full(n, np.nan)
+
+    return np.median(np.vstack(scale_tvt), axis=0), np.median(np.vstack(scale_gr), axis=0)
+
+
+def ncc_alignment_features(
+    hw: pd.DataFrame,
+    tw: pd.DataFrame,
+    gr_cal: pd.Series,
+    windows: tuple[int, ...] = (8, 15, 25),
+    search_radius_tvt: float = 150.0,
+    stride: int = 15,
+) -> pd.DataFrame:
+    """tail 行に対しmulti-scale NCCで独立整列した結果を特徴量化する（exp006）。
+
+    Offline policy: hw の GR は未来 covariate を含む全シーケンスを使ってよいが、
+    typewell 側の TVT/GR のみを参照し tail の TVT は読まない。
+    """
+    tail_mask = hw["is_tail"].to_numpy()
+    n = len(hw)
+    cols = [f"ncc_w{w}_delta" for w in windows] + ["ncc_spread", "ncc_best_corr"]
+    if tail_mask.sum() == 0:
+        return pd.DataFrame({c: np.full(n, np.nan) for c in cols}, index=hw.index)
+
+    anchor = float(hw["last_known_TVT"].iloc[0])
+    gr_tail = gr_cal.to_numpy()[tail_mask]
+    n_tail = len(gr_tail)
+    keyframe_idx = _ncc_keyframe_indices(n_tail, stride)
+    cand_tvt, cand_gr = _ncc_candidate_window(
+        tw["TVT"].to_numpy(), tw["GR"].to_numpy(), anchor, search_radius_tvt
+    )
+
+    gr_filled = pd.Series(gr_tail, dtype="float64").interpolate(limit_direction="both")
+    fallback = float(gr_filled.mean()) if np.isfinite(gr_filled.mean()) else 0.0
+    gr_arr = gr_filled.fillna(fallback).to_numpy()
+
+    scale_tvt_full, scale_corr_full = {}, {}
+    for w in windows:
+        result = _ncc_scale_matches_at_keyframes(gr_arr, cand_tvt, cand_gr, w, keyframe_idx)
+        if result is None:
+            scale_tvt_full[w] = np.full(n_tail, anchor)
+            scale_corr_full[w] = np.full(n_tail, np.nan)
+            continue
+        matched_tvt_kf, _, best_corr_kf = result
+        scale_tvt_full[w] = np.interp(np.arange(n_tail), keyframe_idx, matched_tvt_kf)
+        scale_corr_full[w] = np.interp(np.arange(n_tail), keyframe_idx, best_corr_kf)
+
+    stacked = np.vstack([scale_tvt_full[w] for w in windows])
+    spread = np.nanmax(stacked, axis=0) - np.nanmin(stacked, axis=0)
+    mean_corr = np.nanmean(np.vstack([scale_corr_full[w] for w in windows]), axis=0)
+
+    data = {f"ncc_w{w}_delta": scale_tvt_full[w] - anchor for w in windows}
+    data["ncc_spread"] = spread
+    data["ncc_best_corr"] = mean_corr
+
+    tail_feat = pd.DataFrame(data, index=hw.index[tail_mask])
+    return tail_feat.reindex(hw.index)
+
+
 def trajectory_gr_disagreement_features(
     hw: pd.DataFrame,
     tw: pd.DataFrame,

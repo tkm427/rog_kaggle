@@ -1,409 +1,256 @@
-# CLAUDE.md
+# CLAUDE.md 
 
-Kaggle コンペティションに Claude Code で取り組むためのプロジェクト規約。
+このファイルは**コンペ非依存**。コンペ固有の情報は `docs/{competition}/` に、環境構築手順は
+`README.md` に置く（ここに重複させない）。
 
-- コンペ概要: `docs/{competition}/competition_overview.md`
-- 戦略・時間配分: `docs/{competition}/strategy.md`
-- 過去類似コンペ・公開資料の調査: `docs/{competition}/research/`
-
-`{competition}` は実際のコンペ名（例: `birdclef2026`）に置き換える。
+**このファイルは「原則集」ではなく「ゲート集」として読む。** ゲートは満たすまで次に進まない。
+セッション開始時は `/kaggle-start` を実行すること。
 
 ---
 
-## Kaggleで勝つための原則
+## 1. チーム構成と役割分担
 
-コードを書く前に必ず確認する。
+人間（ntteast）+ Claude Code の 2 人チーム。
 
-### 1. リサーチ・ファースト
-コードを書く前に、過去の類似コンペ TOP 解法・公開 Notebook・Discussion を徹底的に調べる。
-コンペ開始 3 日以内に `research/past_solutions.md` に上位 5 解法を要約することを目標にする。
+| 領域 | 人間 | Claude Code |
+|---|---|---|
+| 方針決定・打ち切り判断・提出枠の選択 | ◎ 最終決定 | 選択肢を 3 つ以内 + 推薦 1 つで提示 |
+| 学習の実行（GPU / 長時間） | ◎ 実行 | コマンドを出力するのみ |
+| Kaggle への提出 | ◎ 実行 | notebook / submission の準備と検証 |
+| リサーチ（Discussion / 論文 / 公開 NB） | レビュー | ◎ 実行 |
+| 実装・分析スクリプト・EDA | レビュー | ◎ 実行 |
+| ドキュメント更新 | — | ◎ 実行 |
 
-### 2. 仮説駆動
-全ての実験は仮説検証である。「とりあえずやってみる」実験は立てない。
-事前に「予測される結果」を書き、実際の結果との差から学びを抽出する。
+### Claude の振る舞い規約
 
-### 3. データに基づく判断
-推測ではなく実際のデータに基づく根拠を示す。
-クラス別 AUC・サンプル数・分布など、具体的な数値を必ず引用する。
+- **選択肢は 3 つまで。必ず推薦を 1 つ添える。** 全列挙・アイデアの洪水は禁止
+  （上位解法の著者も「エージェントの提案は質がランダムで処理しきれない」と指摘している）
+- **1 セッション 1 目的。** 並行して複数実験を進めない
+- **ゲート違反を検知したら作業を止め、状況と選択肢を提示して人間の判断を待つ。** 承認されれば続行してよい
+- 推測でコードを書かない（データを見てから書く）／ 悪化した結果はそのまま報告する
+- **存在しないファイルをドキュメントに書かない。** パスを書いたら `ls` で実在を確認する
 
-### 4. 失敗から学ぶ
-うまく行かなかった実験こそ深掘りする。
-重要な失敗は `postmortems/` に分析を残し、次のコンペに引き継ぐ。
+### 人間に読ませるものの規約
 
----
+**md ファイルは Claude と git のための正本であり、人間が読む前提にしない。**
+人間の認知負荷を上げる出力は、それ自体が失敗とみなす。
 
-## コンペ進行フェーズ別ガイド
-
-### Phase 1: リサーチ
-- `competition_overview.md` を完成させる
-- `research/past_solutions.md` に過去類似コンペ TOP 5 解法を要約
-- `research/discussions.md` に重要 Discussion の要点を記録
-- `research/public_notebooks.md` に公開 Notebook の手法とスコアを記録
-- データを眺めて `eda/` に 3-5 本の発見を書く
-- `strategy.md` を書く（時間配分・仮説リスト）
-
-### Phase 2
-- 公開 Notebook を fork してもよい。とにかく `submission.csv` を出す
-- ローカル val ↔ LB の相関を 1 回測定
-
-### Phase 3: 仮説検証ループ
-- 1 実験 = 1 仮説 = 1 `expXXX.md`
-- 効かなかった実験は重要度に応じて `postmortems/` に深掘り
-- 週末に `strategy.md` の「週次ふりかえり」を更新
-
-### Phase 4: 終盤
-- 新規アーキテクチャ実験は原則停止
-- アンサンブル・seed averaging・推論最適化に集中
-- 提出枠の使い方を `strategy.md` に明記
+- **判断を求めるときは AskUserQuestion を使う。** 散文で選択肢を並べて読ませない
+- **md の中身をチャットに貼らない。** ダッシュボードを再生成し、パスと「前回からの差分」だけ述べる
+- **状況報告は `/kaggle-start` の固定フォーマットに従う。** 毎回違う形で書かない
+- 長い調査結果・比較・ふりかえりは md に書き、チャットには結論と次の一手だけ出す
 
 ---
 
-## ディレクトリ構成
+## 2. 勝つための 5 原則
+
+1. **リサーチ・ファースト** — 他人が公開済みの中核アイデアを、読まずに自分で再発明しようとしない
+2. **定式化 > 特徴量** — 同じ定式化の枝を掘るより、別の定式化を 1 つ試す方が期待値が高い
+3. **仮説駆動** — 事前予測とゲート基準を書いてから実験する
+4. **データに基づく判断** — 数値を引用する。「投資対効果が低い」は **1 回動かしてから** 言う
+5. **失敗から学ぶ** — 失敗の「層」（実装 / ハイパラ / 定式化）を特定する
+
+---
+
+## 3. フェーズとゲート
+
+### Phase 0: セットアップ（Day 0-1）
+`/kaggle-new {competition}` を実行 → 環境起動 → データ DL。
+
+### Phase 1: リサーチ（〜Day 7）
+
+| ID | 完了条件 |
+|---|---|
+| **R1** | `competition_overview.md` 完成（評価指標 / データ / 提出形式 / Code Comp 制約 / リーク境界の表） |
+| **R2** | `research/discussions.md`: **upvote 上位 10 スレッド + host 投稿の全件**について、**本文とコメント欄を読んだ**要約。「未読」項目が 1 つでも残っていれば不合格 |
+| **R3** | `research/past_solutions.md`: 類似コンペ TOP5 の要約 |
+| **R4** | `research/public_notebooks.md`: 公開上位帯の NB を 3 本、**実コードを読んで**手法とリークの有無を記録 |
+| **R5** | `formulations.md`: **問題の定式化候補を 3 案以上**。各案に「想定上限 / 実装コスト / 必要資源 / 出典」。1 案しか出せないなら R2/R3 の調査が足りていない |
+| **R6** | `eda/` に 3〜5 本の発見 |
+
+### Phase 2: E2E 提出（〜Day 10）
+
+| ID | 完了条件 |
+|---|---|
+| **S1** | submission が LB にスコアを出した（公開 NB の fork でもよい） |
+| **S2** | OOF（正しい分割）と LB の対応を 1 点記録 |
+| **S3** | **2 系統目（NN 系）の依存を `uv add` 済み**（torch / timm 等）。ここで入れないと後から入らない |
+
+### Phase 3: 二系統並走 + 仮説検証（本体）
+
+| ID | 完了条件 |
+|---|---|
+| **T1** | **異なるアーキテクチャ族を 2 系統**、いずれも「提出可能な状態」にする。T1 未達のまま片系統だけの改善実験は **3 本まで** |
+
+以降は第 4 節の実験ループを回す。
+
+### Phase 4: 終盤（残り 2 週間）
+
+| ID | 完了条件 |
+|---|---|
+| **F1** | 新規アーキテクチャ実験を停止し、アンサンブル / seed averaging / 推論最適化に集中 |
+| **F2** | **提出枠の使い方を先に決めて `strategy.md` に明記**（例: 1 枠 CV 最良、1 枠 堅牢側） |
+| **F3** | **実データ規模で推論を通す**。リラン時間・メモリの実測値を記録 |
+
+---
+
+## 4. 実験の規律
+
+- 1 実験 = 1 仮説 = 1 `docs/{competition}/experiments/expXXX.md`
+- 着手前に「仮説」「事前予測」「**ゲート基準**」「**どの定式化に属するか**」を書く（`/kaggle-exp` が強制）
+- **ゲート基準は null model 比ではなく「目標スコアへの残距離を何 % 詰めるか」で置く**
+  （前回は flat anchor 12.8ft を延々基準にしたが上位は 5.6。この基準は道筋と無関係だった）
+- 結果には **「失敗の層」を必ず分類**: 実装 / ハイパラ / **定式化**
+- **2 ストライクルール**: 同一定式化で 2 連続「ゲート不合格 or 改善ゼロ」→ **停止して人間に報告**し、
+  次の 1 実験は `formulations.md` の別案に充てる。**3 連続は禁止**
+- 悪化した実験を即廃棄しない。層別スコア・per-sample 残差で「どこが悪化したか」を確認してから結論を出す
+
+### postmortem を書く基準
+期待と実測の乖離が大きい / 同種の失敗が 2 回続いた / 1 週間以上成果が出ない / LB とローカルの乖離。
+
+必須項目は「何を期待していたか」「何が起きたか」「5 Why」「次回どうするか」。
+**5 Why の最下段が実装レベルで終わっていないかを必ず自己チェックする**
+（前回は 5 段すべて実装レベルで止まり、定式化の誤りに到達できなかった）。
+
+---
+
+## 5. 時間予算の算術
+
+`strategy.md` の先頭に常に置き、毎週更新する。
 
 ```
-kaggle_project/
-├── conf/
-│   ├── config.yaml
-│   ├── model/
-│   ├── data/
-│   └── train/
-├── src/
-│   ├── dataset.py
-│   ├── model.py
-│   ├── train.py
-│   └── utils/wandb_utils.py  # W&Bヘルパー
-├── scripts/
-│   ├── train.py               # 学習エントリポイント（Hydra）
-│   ├── make_submission.py     # 推論 + submission.csv 生成
-│   └── analyze_*.py           # 分析スクリプト（再利用可能）
-├── notebooks/                 # EDA・可視化のみ（本番コード禁止）
-├── wandb/                  # W&B実験ログ（Git管理外）
-├── data/
-│   ├── raw/                   # Kaggle 生データ（Git 管理外）
-│   └── processed/             # 前処理済みデータ（Git 管理外）
-├── docs/
-│   └── {competition}/
-│       ├── competition_overview.md   # コンペ仕様（静的）
-│       ├── strategy.md               # 戦略・時間配分・週次ふりかえり
-│       ├── experiments.md            # 実験インデックス・現在のフォーカス
-│       ├── experiments/              # 1 実験 1 ファイル
-│       │   └── exp001_baseline.md
-│       ├── eda/                      # データ理解の発見
-|       |   ├── fig/                  # EDAの可視化
-│       │   └── class_distribution.md
-│       ├── research/                 # 競合・先行研究の調査
-│       │   ├── past_solutions.md
-│       │   ├── discussions.md
-│       │   ├── public_notebooks.md
-│       │   └── papers.md
-│       └── postmortems/              # 重要な失敗の深掘り
-│           └── pm001_aug_failed.md
-└── outputs/                   # チェックポイント・submission（Git 管理外）
+残り日数: N / 1実験の平均所要: D 日 / 残り実験可能数: N/D 本
+現在の best: X / 目標: Y / 残距離: X−Y
+計画中の実験段数: M 本   ← M > N/D なら計画を切る
 ```
+
+1 実験に 3 日以上かかる見込みなら、先に「1 日で終わる縮小版」を設計する。
 
 ---
 
-## ドキュメント管理
+## 6. 提出の規律
 
-### 役割別ドキュメント一覧
+- **週 1 回以上提出する（下限）。** CV-LB 相関の測定と、終盤の submission デバッグの両方に必要
+- 毎提出を `experiments.md` の CV-LB 表に 1 行追加
+- LB が「良すぎる」ときはリークを疑い、train/test の重複を必ず確認する
+- **public LB の順位を目標にしない。** 信頼するのは正しく分割した OOF
+
+---
+
+## 7. 情報収集の規律
+
+- **WebFetch が SPA（Kaggle 等）で本文を取れなかったら、即 claude-in-chrome に切り替える。**
+  「未読」のまま次セッションに送ることを**禁止**する
+- Discussion は **upvote 順と新着順の両方**を見る。**コメント欄まで読む**
+- host のコメント・公式アナウンスは最優先
+- 公開実装（notebook / GitHub）があれば URL と入手方法を必ず記録する
+- **コンペ期間中も週次でリサーチを更新する。** Phase 1 で終わりにしない
+
+---
+
+## 8. セッション運用
+
+- **開始時**: `/kaggle-start`（ダッシュボードを再生成して状況を報告する）
+- **実験開始時**: `/kaggle-exp`
+- **終了時**: `expXXX.md` 完成 → `experiments.md` に 1 行 → 「現在のフォーカス」更新 →
+  （提出したら）CV-LB 表 → 週末なら `/kaggle-audit`。**これらを済ませてから `/clear`**
+- **Plan mode を使う場面**: 新定式化・新パイプライン導入時 / 次の実験の相談 / 失敗の原因分析
+  → 実装前に必ず設計を確定し、承認を得てから実装に入る
+
+---
+
+## 9. ドキュメント体系
+
+テンプレートは `docs/_templates/` にある（`/kaggle-new` がコピーする）。
 
 | ファイル | 役割 | 更新タイミング |
 |---|---|---|
-| `competition_overview.md` | コンペ仕様（静的） | コンペ開始時に 1 回 |
-| `strategy.md` | 戦略・時間配分・週次ふりかえり | 週次 + 戦略変更時 |
-| `experiments.md` | 全実験のインデックス・現在のフォーカス | 各実験完了時 |
+| `gates.md` | **ゲートの達成宣言 + 根拠**（ダッシュボードが読む） | ゲート達成時 |
+| `competition_overview.md` | コンペ仕様（静的） | 開始時に 1 回 |
+| `strategy.md` | 時間予算・戦略・週次ふりかえり | 週次 + 戦略変更時 |
+| `formulations.md` | **定式化候補ボード**（案 / 想定上限 / コスト / 状態） | Phase 1 + 定式化を試すたび |
+| `experiments.md` | 全実験のインデックス・現在のフォーカス・CV-LB 表 | 各実験完了時 |
 | `experiments/expXXX.md` | 1 実験の詳細 | 該当実験中・完了時 |
 | `eda/XXX.md` | データ理解の発見 | EDA 時 |
-| `research/*.md` | 競合解法・論文・公開資料の調査 | リサーチ時 |
+| `research/*.md` | Discussion / 過去解法 / 公開 NB / 論文 | リサーチ時（週次更新） |
 | `postmortems/pmXXX.md` | 重要な失敗の深掘り | 大きな失敗時 |
+| `tools.md` | 再利用可能な分析スクリプトのカタログ | ツール追加時に必ず |
 
-### `strategy.md` テンプレ
-
-```markdown
-## コンペ期間と時間配分
-- 開始: YYYY-MM-DD / 終了: YYYY-MM-DD
-- Week 1: リサーチ + 最小 E2E 提出
-- Week 2-3: ベースライン強化
-- Week 4-N: 改善実験
-- 終盤 2 週間: アンサンブル・最終調整
-
-## 現在の仮説リスト（優先度順）
-1. [H1] 〇〇のaugは稀少クラスに効くはず → exp005 で検証予定
-2. [H2] △△の pretrain は…
-...
-
-## 週次ふりかえり
-### Week 1 (YYYY-MM-DD 〜)
-- やったこと:
-- 学んだこと:
-- 戦略変更点:
-```
-
-### `experiments/expXXX.md` テンプレ（仮説駆動を必須化）
-
-```markdown
-# expXXX: <短いタイトル>
-
-## 仮説
-SpecAugment で稀少クラスの AUC が上がるはず。
-
-## 事前予測
-- 全体 AUC: +0.005 程度
-- 稀少クラス AUC: +0.02 程度
-- 頻出クラス AUC: ±0 〜 微減
-
-## 設定
-- 親 config: `conf/config.yaml`
-- 変更: `train.augment.spec_mask=true train.augment.mask_width=20`
-- W&B Run: `20260513_effnet_b0_specaug20`
-
-## 実際の結果
-- 全体: -0.003 / 稀少: -0.01 / 頻出: -0.005
-
-## 考察
-事前予測と逆。原因仮説:
-(a) マスク幅が広すぎた → exp012 で検証
-(b) 稀少クラスは元々データが少なくマスクで情報消失 → 別アプローチ要
-
-## 次のアクション
-- exp012: マスク幅を半分にして再検証
-- 別途、稀少クラス専用の up-sampling 案を strategy.md に追加
-```
-
-### `research/` の中身
-
-- `past_solutions.md`: 過去類似コンペ TOP 5 解法。「モデル」「データ処理」「工夫」「学び」を表形式で
-- `discussions.md`: 重要 Discussion の要点と URL
-- `public_notebooks.md`: 公開 Notebook の手法・スコア・参考になる点
-- `papers.md`: 関連論文のメモ
-
-`past_solutions.md` の項目例:
-
-```markdown
-## {過去コンペ名} 1st place
-- URL: ...
-- モデル: EfficientNet-B3 + SED head
-- データ処理: 5sec 窓 → 30sec 推論
-- 工夫: secondary_labels 活用、mixup α=0.5
-- 学び: secondary_labels を無視するのは間違い
-```
-
-### `postmortems/` を書く判断基準
-
-以下に該当する失敗は postmortem を書く。
-
-- 期待スコアと実測スコアの差が大きい（例: 期待 +0.02、実測 -0.01）
-- 同じパターンの失敗が 2 回続いた
-- 1 週間以上を費やしたが成果が出なかった
-- LB 提出で予想外の挙動（ローカル val と LB の乖離など）
-
-postmortem の必須項目: 「何を期待していたか」「何が起きたか」「なぜ起きたか（5 Why）」「次回どうするか」
-
----
-
-## Claude Code 運用ルール
-
-### セッション開始時の必読
-1. `CLAUDE.md`（このファイル）
-2. `docs/{competition}/strategy.md` — 今週の方針
-3. `docs/{competition}/experiments.md` — 直近の結果と現在のフォーカス
-4. （詰まったら）`docs/{competition}/research/` および直近の `postmortems/`
-
-### Plan mode を使う場面（Shift+Tab で起動）
-- 新モデル・新パイプライン導入時
-- 「次に何の実験をすべきか」を相談したいとき
-- 失敗の原因分析を構造化したいとき
-→ **実装前に必ず plan mode で設計を確定し、ユーザーの承認を得てから実装に入る**
-
-### TodoWrite の使用
-3 ステップ以上のタスクは必ず TodoWrite で分解する。1 タスク完了ごとに即更新。
-
-### コンテキスト管理（`/clear`）
-- 1 実験完了 → `strategy.md` / `experiments.md` を更新 → `/clear`
-- 長い学習ログを残したまま次の実験に進まない（要約してから `/clear`）
-- セッション開始時の必読ファイルは `/clear` 後に毎回読み直す
-
-### Subagent（Task tool）の活用
-独立した探索は並列化する。例:
-- 過去コンペ 3 つの解法を並列調査
-- 公開 Notebook を並列分析
-- 複数の analyze スクリプトを並列実行して結果を集約
-
-### 禁止事項
-- 推測でコードを書き始めない（データを見てから書く）
-- 動作確認済みのベースラインを上書きしない（新ファイル or 新 config で対応）
-- 「とりあえず動かしてみる」実験を立てない（仮説と事前予測を書いてから）
-- `experiments.md` を更新せずに次の実験に進まない
-
----
-
-## 実行環境
+### ダッシュボード（人間の読む場所）
 
 ```bash
-docker compose up -d                                          # 起動
-docker compose exec workspace bash                            # コンテナに入る
-docker compose exec workspace python scripts/train.py         # 直接実行
-docker compose down                                           # 停止
-docker compose logs -f                                        # ログ確認
+python3 scripts/build_dashboard.py --open      # outputs/dashboard.html を生成して開く
 ```
 
-| サービス | URL |
-|---|---|
-| JupyterLab | http://localhost:8888 |
-| W&B ダッシュボード | https://wandb.ai/\<entity\>/\<project\> |
+上記の md 群をパースし、**フェーズ / 未達ゲート / 時間予算 / 警告 / 定式化ボード / OOF 推移**を
+1 画面に集約する。**`gates.md` の自己申告と機械計測（未読件数・提出回数・アーキ族数・
+同一定式化の連続数）を突き合わせ、食い違いを検出する** — 「やった気になっていた」を潰すのが主目的。
+`/kaggle-start` と `/kaggle-audit` が自動で再生成する。
 
-学習の実行はユーザーが行う。コマンドを出力すること。
+`expXXX.md` の必須欄（雛形は `docs/_templates/experiments/exp000_template.md`）:
+**所属する定式化 + 2 ストライク判定 / 仮説 / 事前予測 / ゲート基準 / 設定 / 実際の結果 /
+失敗の層 / 考察 / 次のアクション**。
 
 ---
 
-## 設定管理（Hydra）
+## 10. 実装規約
 
-すべての実験パラメータは `conf/` 以下の YAML で管理する。ファイルを書き換えず、CLI オーバーライドで変更する。
+- **Hydra**: 全パラメータは `conf/` の YAML。**ファイルを書き換えず CLI オーバーライドで変更**し、
+  新しいモデル・データ処理は既存 config を上書きせず新規ファイルを作る
+  → `uv run python scripts/train.py model=lgbm train.lr=5e-4 wandb.run_name=20260513_lgbm_lr5e4`
+- **W&B**: Project = phase（`baseline` / `model_search` / `ensemble` / `final` 等）、
+  Run = `YYYYMMDD_{model}_{変更点}`。必須ログは `val_score` / **層別スコア** / `val_loss` / `train_loss`。
+  best model と submission を artifact 化する
+- **推論**: `scripts/make_submission.py` に集約（`src/inference.py` は作らない）。
+  新手法（TTA・アンサンブル等）は直接書き換えず、関数を追加して config で切り替える
+- **パッケージ**: `uv add <pkg> && git add uv.lock pyproject.toml && docker compose up --build -d`
+- **分析ツール**: `scripts/analyze_*.py` を作ったら**必ず `docs/{competition}/tools.md` に追記**する
+  （`scripts/build_dashboard.py` はコンペ非依存なので tools.md には書かない）
 
-```bash
-python scripts/train.py model=effnet_b2 train.lr=5e-4 wandb.run_name=20260513_effnet_b2_lr5e4
-```
+### Code Competition の同期ルール
 
-`conf/config.yaml` の基本構成:
+Kaggle への実提出は `kaggle_kernel/` の**自己完結 notebook を正本**とする
+（Hydra や `src/` への import 依存を持ち込めないため）。
 
-```yaml
-defaults:
-  - model: effnet_b0
-  - data: default
-  - train: default
-  - _self_
-
-wandb:
-  project: baseline
-  run_name: ???  # 実行時に必ず指定
-```
-
-新しいモデル・データ処理を追加するときは、既存 config を上書きせず新規 config ファイルを作る。
+> `src/` や `scripts/make_submission.py` の**有効化されている推論経路**に変更が入ったら、
+> 同じ変更を notebook に反映してから実験を完了とする（`experiments.md` を更新する前に確認）。
+> `enable_*: false` のまま無効化されている機能は、有効化するまで移植不要。
+> 学習済みモデルの更新だけなら notebook の再 push は不要（モデル Dataset のみ version 更新）。
 
 ---
 
-## 実験管理（W&B）
+## 11. 禁止事項
 
-### 命名規則
+- 推測でコードを書き始める（データを見てから書く）
+- 動作確認済みのベースラインを上書きする（新ファイル or 新 config で対応）
+- 「とりあえず動かしてみる」実験を立てる（仮説と事前予測を書いてから）
+- `experiments.md` を更新せずに次の実験に進む
+- **同一定式化を 3 連続で掘る**
+- **「未読」の調査 TODO を次セッションに送る**
+- **根拠データ無しに手法の優先度を下げる**
+- **提出 0 回の週を作る**
+- **md の中身をチャットに貼って人間に読ませる**（ダッシュボードを再生成して差分だけ述べる）
 
-| 種別 | 形式 | 例 |
+---
+
+## 12. 新コンペ開始時のリセット手順
+
+このリポジトリは**コンペをまたいで使い回す**。新コンペでは:
+
+1. `/kaggle-new {competition}` — `docs/_templates/` から `docs/{competition}/` を生成し、
+   Phase 0/1 のゲートを TodoWrite に展開する
+2. `conf/` — 旧コンペの `train/expXXX.yaml` 等を削除（`config.yaml` の骨格は残す）
+3. `src/{dataset,features,model}.py` — 旧コンペのロジックは残さない。前コンペの実装を参照したい場合は
+   git 履歴か旧タグから引く
+4. `kaggle_kernel/kernel-metadata.json` — id / title / competition_sources を新コンペに更新し、
+   `submission.ipynb` は新規作成
+5. `data/raw/` を入れ替え、`pyproject.toml` の依存を見直す（**Gate S3 の NN 系依存を忘れない**）
+6. `docs/{旧コンペ}/` は**削除せず残す**（次コンペの資産）
+
+---
+
+## 13. 過去コンペの資産
+
+| コンペ | 結果 | 主な学び |
 |---|---|---|
-| Project | `{phase}` | `baseline`, `augmentation`, `model_search`, `cpu_opt` |
-| Run | `YYYYMMDD_{model}_{変更点}` | `20260513_effnet_b0_baseline` |
-
-phase の選択肢: `baseline` / `augmentation` / `model_search` / `pseudo_label` / `cpu_opt` / `ensemble` / `final`
-
-### 必須ログ項目
-
-```python
-wandb.init(
-    project=cfg.wandb.project,
-    name=cfg.wandb.run_name,
-    config=OmegaConf.to_container(cfg, resolve=True),
-)
-wandb.log({
-    "val_score": val_score,                # 全体
-    "val_score_rare": val_score_rare,      # 稀少カテゴリ
-    "val_score_common": val_score_common,  # 頻出カテゴリ
-    "val_loss": val_loss,
-    "train_loss": train_loss,
-}, step=epoch)
-wandb.save("outputs/best_model.pth")
-
-artifact = wandb.Artifact("submission", type="submission")
-artifact.add_file("outputs/submission.csv")
-wandb.log_artifact(artifact)
-```
-
-`val_score_rare` / `val_score_common` の分け方はコンペごとに定義し、`competition_overview.md` に記録する。
-
----
-
-## 推論・提出
-
-推論ロジックは **`scripts/make_submission.py` に集約**（`src/inference.py` は作らない）。
-ローカル/Docker 上での動作確認・OOF 検証用。
-
-```bash
-docker compose exec workspace python scripts/make_submission.py
-# → outputs/submission.csv が生成される
-```
-
-**Kaggle への実提出は `make_submission.py` を直接使わない**（Hydra・`src/` への import 依存があり、
-Code Competition のインターネット OFF 環境にそのまま持ち込めない）。代わりに
-**`kaggle_kernel/submission.ipynb`** を正本として維持する（`src/dataset.py` / `src/features.py` の
-必要な関数と `make_submission.py::run_inference` 相当のロジックを Hydra 抜きの自己完結コードとして
-埋め込んだ Notebook。運用詳細は `kaggle_kernel/README.md` 参照）。
-
-**ルール**: `src/dataset.py` / `src/features.py` / `scripts/make_submission.py` の
-**有効化されている（config のデフォルトで実際に実行される）推論経路**に変更が入ったら、
-**同じ変更を `kaggle_kernel/submission.ipynb` にも反映してから実験を完了とする**
-（`experiments.md` を更新する前に確認する）。`enable_xxx: false` のまま無効化されている
-実験的機能（ABANDONED 含む）は、有効化するまで Notebook に移植する必要はない
-（exp001 の `dtw_align` 同様、未使用ロジックは Notebook に持ち込まない方針）。
-学習済みモデルの更新だけなら Notebook の再 push は不要（`kaggle datasets version` でモデル
-Dataset のみ更新）。
-
-新しい推論手法（TTA・アンサンブル等）を試すときは `make_submission.py` を直接書き換えず、関数を追加して config で切り替える。Notebook 側も対応する関数を追加する形で同期する。
-
----
-
-## 分析の原則
-
-**推測ではなく、実際のデータに基づく根拠を示す。**
-
-- 何かを主張・判断するときは、対応するスクリプトを実行し、具体的な数値（スコア・サンプル数・分布等）を引用する
-- 実験結果が悪化した場合、即廃棄しない。クラス別スコアで「どこが悪化したか」を確認してから結論を出す
-- 新しい分析を行ったら、スクリプトを `scripts/analyze_*.py` または `notebooks/` に保存し、**分析ツールカタログ**に追記する
-
----
-
-## 分析ツールカタログ
-
-再利用可能な分析スクリプト・ノートブックの一覧。新しいツールを追加したら必ずここに記載する。
-
-| ファイル | 用途 | 主な引数 | 主な出力 |
-|---|---|---|---|
-| `scripts/analyze_per_class_auc.py` | クラス別スコア分析（稀少 vs 頻出） | `--model`, `--data` | クラス別スコアテーブル |
-| `scripts/analyze_cv_lb_corr.py` | ローカル CV と LB の相関分析 | `--exp` | 散布図・相関係数 |
-| `scripts/eda_overview.py` | データ全体の俯瞰 EDA | なし | ウェル数・行数・TVT分布・GRシフト・null model RMSE |
-| `scripts/analyze_beam_alignment_quality.py` | beam search alignment（exp002）のprefix-holdout sanity check | `--train-dir`, `--n-wells`, `--seed` | flat anchor比較RMSE。holdout長は固定30%のため長horizon検証には不十分（pm001参照） |
-| `scripts/visualize_beam_alignment_drift.py` | beam search alignment（pm001）のドリフト・fit品質の可視化 | `--train-dir`, `--n-wells`, `--seed` | `postmortems/fig/pm001_drift_vs_step.png`（ステップ数別RMSE）, `pm001_path_overlay.png`（true vs beam vs flat anchorパス）, `pm001_rmse_distribution.png`（holdout30%/90%のRMSE分布比較） |
-| `scripts/analyze_per_well_rmse.py` | ウェル別残差分析（exp003）。tail長・rare行比率とOOF RMSEの相関、外れ値ウェル抽出 | `--oof-path`, `--rare-threshold`, `--top-n` | `eda/fig/exp003_per_well_rmse.csv`, `exp003_rmse_histogram.png`, `exp003_rmse_vs_tail_length.png`, `exp003_rmse_vs_rare_frac.png`, `exp003_worst_wells.png` |
-
----
-
-## セッション運用フロー
-
-### セッション開始時
-1. `CLAUDE.md` を読む
-2. `docs/{competition}/strategy.md` で今週の方針を確認
-3. `docs/{competition}/experiments.md` で現在のフォーカスを確認
-4. 今回のセッションでやることを TodoWrite に書く
-5. **実装前に必ず設計を提案し、承認を得てから実装する**
-
-### 実験実行時
-1. 仮説と事前予測を `experiments/expXXX.md` に先に書く
-2. config を作成（または CLI オーバーライドを決める）
-3. 学習を実行（長時間なら別ターミナル）
-4. 結果が出たら `expXXX.md` の「実際の結果」「考察」「次のアクション」を埋める
-5. `experiments.md` の表に 1 行追加
-
-### セッション終了前
-- `experiments.md` の「現在のフォーカス」を次タスクに更新
-- `experiments/expXXX.md` を完成させる
-- LB 提出した場合は CV-LB 相関メモに記録
-- 大きな失敗があれば `postmortems/pmXXX.md` を作成
-- 週末なら `strategy.md` の週次ふりかえりを更新
-
----
-
-## パッケージ管理（uv）
-
-```bash
-uv add <package>
-git add uv.lock pyproject.toml
-docker compose up --build -d    # コンテナ再ビルドが必要
-```
-
----
+| `docs/rogii2026/` | 4365位 / 6125（private 12.693、提出 1 回） | `postmortems/pm002_competition_retrospective.md` — 本ファイルの全ルールの由来。`research/top_solutions.md` に上位解法の要約 |
