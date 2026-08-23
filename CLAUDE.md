@@ -233,24 +233,44 @@ Kaggle への実提出は `kaggle_kernel/` の**自己完結 notebook を正本*
 
 ---
 
-## 12. 新コンペ開始時のリセット手順
+## 12. 新コンペの立ち上げ
 
-このリポジトリは**コンペをまたいで使い回す**。新コンペでは:
+**コンペごとに新しいリポジトリを作る。** このリポジトリから「汎用の仕組み」だけをコピーする。
 
-1. `/kaggle-new {competition}` — `docs/_templates/` から `docs/{competition}/` を生成し、
-   Phase 0/1 のゲートを TodoWrite に展開する
-2. `conf/` — 旧コンペの `train/expXXX.yaml` 等を削除（`config.yaml` の骨格は残す）
-3. `src/{dataset,features,model}.py` — 旧コンペのロジックは残さない。前コンペの実装を参照したい場合は
-   git 履歴か旧タグから引く
-4. `kaggle_kernel/kernel-metadata.json` — id / title / competition_sources を新コンペに更新し、
-   `submission.ipynb` は新規作成
-5. `data/raw/` を入れ替え、`pyproject.toml` の依存を見直す（**Gate S3 の NN 系依存を忘れない**）
-6. `docs/{旧コンペ}/` は**削除せず残す**（次コンペの資産）
+```bash
+bash scripts/new_repo.sh ~/Documents/code/<new>_kaggle <前コンペ名>
+cd ~/Documents/code/<new>_kaggle && git init && git add -A && git commit -m 'init from template'
+```
+
+コピーされるもの: `CLAUDE.md` / `.claude/`（commands + settings）/ `docs/_templates/` /
+`scripts/build_dashboard.py` / `scripts/new_repo.sh` / Docker まわり / `pyproject.toml` /
+`conf/config.yaml` + `conf/model/lgbm.yaml` / `README.md` / `.gitignore`。
+
+コピーされないもの: `src/` / `scripts/{train,make_submission,analyze_*,visualize_*}.py` /
+`kaggle_kernel/` / `conf/{data,train}/` / `notebooks/` / `data/` / `outputs/`。
+**前コンペの実装は持ち込まない。** 参照したくなったら旧リポジトリの git 履歴から引く。
+
+第2引数以降に渡した過去コンペは `docs/_archive/{名前}/` として**知識だけ**（postmortems /
+formulations.md / gates.md / research）が入る。`_` 始まりなのでダッシュボードの
+コンペ自動判定からは除外される。
+
+### コピー後にやること
+
+1. `.env` を作る（`KAGGLE_USERNAME` / `KAGGLE_KEY` / `WANDB_API_KEY`）
+2. `pyproject.toml` の依存を見直して `uv lock` — **Gate S3 の NN 系（torch / timm 等）を忘れない**
+3. `docker compose up --build -d`
+4. Claude Code を起動して **`/kaggle-new <competition-slug>`**
+5. データを `data/raw/` に置く
 
 ---
 
 ## 13. 過去コンペの資産
 
-| コンペ | 結果 | 主な学び |
+そのコンペを戦ったリポジトリでは `docs/{コンペ名}/`、`new_repo.sh` でコピーした先では
+`docs/_archive/{コンペ名}/`（`_` 始まりなのでダッシュボードの自動判定から外れる）。
+
+| コンペ | 結果 | 主な学び（上記ディレクトリ内の相対パス） |
 |---|---|---|
-| `docs/rogii2026/` | 4365位 / 6125（private 12.693、提出 1 回） | `postmortems/pm002_competition_retrospective.md` — 本ファイルの全ルールの由来。`research/top_solutions.md` に上位解法の要約 |
+| rogii2026 | 4365位 / 6125（private 12.693、提出 1 回） | `postmortems/pm002_competition_retrospective.md` — **本ファイルの全ルールの由来**。`research/top_solutions.md` に上位解法、`formulations.md` に「定式化ボードがあれば何が並んだか」の事後再構成 |
+
+**新しいコンペを始める前に、直前コンペの postmortem を必ず読み直す。**

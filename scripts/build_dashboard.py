@@ -662,15 +662,30 @@ def main() -> int:
     if a.competition:
         comp = a.competition
     else:
-        cands = sorted(
-            (p for p in docs_root.iterdir() if p.is_dir() and not p.name.startswith("_")),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
+        cands = [p for p in docs_root.iterdir() if p.is_dir() and not p.name.startswith("_")]
         if not cands:
             print("docs/ にコンペディレクトリがありません。", file=sys.stderr)
             return 1
+        # 締切が未来のものを優先し、その中で最も近いもの。
+        # 締切が読めない／全部過去なら更新日時が新しいもの（mtime だけで選ぶと、
+        # 過去コンペを後からコピーした際に誤って選んでしまう）。
+        today = dt.date.today()
+        def key(p: Path) -> tuple[int, float]:
+            d = None
+            ov = read(p / "competition_overview.md")
+            if ov:
+                for row in parse_table(find_section(split_sections(ov), "基本情報")):
+                    vals = list(row.values())
+                    if len(vals) > 1 and ("締切" in strip_md(vals[0]) or "終了" in strip_md(vals[0])):
+                        d = first_date(strip_md(vals[1]))
+            if d and d >= today:
+                return (0, (d - today).days)          # 開催中: 締切が近い順
+            return (1, -p.stat().st_mtime)            # それ以外: 更新が新しい順
+        cands.sort(key=key)
         comp = cands[0].name
+        if len(cands) > 1:
+            print(f"コンペを自動選択: {comp}"
+                  f"（他: {', '.join(p.name for p in cands[1:])}。-c で明示指定できます）")
 
     docs = docs_root / comp
     if not docs.is_dir():
